@@ -823,20 +823,23 @@ def add_speaker_notes(slide, notes: str):
 
 def resolve_image_paths(spec, base_dir):
     """슬라이드의 이미지 경로를 spec.json 기준 절대경로로 변환한다."""
+    base_dir = os.path.abspath(base_dir)
     for slide_data in spec.get("slides", []):
         # 단일 이미지
         if "image" in slide_data and slide_data["image"]:
             img = slide_data["image"]
             if not os.path.isabs(img):
-                slide_data["image"] = os.path.normpath(os.path.join(base_dir, img))
+                slide_data["image"] = os.path.abspath(os.path.join(base_dir, img))
+            else:
+                slide_data["image"] = os.path.abspath(img)
         # 다중 이미지
         if "images" in slide_data and slide_data["images"]:
             resolved = []
             for img in slide_data["images"]:
                 if not os.path.isabs(img):
-                    resolved.append(os.path.normpath(os.path.join(base_dir, img)))
+                    resolved.append(os.path.abspath(os.path.join(base_dir, img)))
                 else:
-                    resolved.append(img)
+                    resolved.append(os.path.abspath(img))
             slide_data["images"] = resolved
 
 

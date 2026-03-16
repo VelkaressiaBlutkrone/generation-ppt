@@ -92,6 +92,10 @@ def generate_preview_html(slides_json_path: str, output_html: str, images_dir: s
     meta = slides_data.get("meta", {}) if isinstance(slides_data, dict) else {}
     default_theme = meta.get("theme", "light")
 
+    # 경로 정규화 (절대 경로로 변환)
+    if images_dir:
+        images_dir = os.path.abspath(images_dir)
+
     # 이미지가 있는 모든 슬라이드의 이미지 수집
     multi_image_slides = {}
     for i, s in enumerate(slides):
@@ -101,8 +105,10 @@ def generate_preview_html(slides_json_path: str, output_html: str, images_dir: s
         if all_imgs:
             resolved = []
             for img in all_imgs:
-                if images_dir and not os.path.isabs(img):
-                    img = os.path.join(images_dir, img)
+                if not os.path.isabs(img) and images_dir:
+                    img = os.path.abspath(os.path.join(images_dir, img))
+                else:
+                    img = os.path.abspath(img)
                 resolved.append(img)
             multi_image_slides[i] = resolved
 
