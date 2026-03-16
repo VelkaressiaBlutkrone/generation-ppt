@@ -1,0 +1,70 @@
+{
+  "meta": {
+    "title": "테스트 프레젠테이션",
+    "author": "테스트",
+    "date": "2026-03-14",
+    "theme": "dark"
+  },
+  "slides": [
+    {
+      "layout": "title",
+      "title": "마크다운에서 PPTX로",
+      "subtitle": "md-to-pptx 스킬 데모",
+      "date": "2026-03-14",
+      "author": "Claude"
+    },
+    {
+      "layout": "content",
+      "title": "핵심 기능 소개",
+      "body": "- **마크다운 파싱**: # 기준 슬라이드 분리\n- *이미지 처리*: 로컬 이미지 자동 삽입\n- URL 캡처: 웹페이지 스크린샷\n- `코드` 지원: 인라인 코드 포맷팅\n- ~~취소선~~ 지원"
+    },
+    {
+      "layout": "kpi",
+      "title": "성과 지표",
+      "metrics": [
+        {"value": "42%", "label": "성장률", "change": "+12%"},
+        {"value": "1.2M", "label": "사용자 수", "change": "+340K"},
+        {"value": "99.9%", "label": "가동률", "change": "▲0.3%"}
+      ]
+    },
+    {
+      "layout": "comparison",
+      "title": "Before vs After",
+      "left": {"title": "Before", "body": "- 수동 PPT 제작\n- 디자인 불일치\n- 시간 소모 큼"},
+      "right": {"title": "After", "body": "- 자동 PPTX 생성\n- 일관된 테마 적용\n- 5분 이내 완성"}
+    },
+    {
+      "layout": "code",
+      "title": "사용법",
+      "language": "python",
+      "code": "# 마크다운을 PPTX로 변환\npython generate_pptx.py spec.json output.pptx\n\n# 프리뷰 HTML 생성\npython preview.py slides.json preview.html"
+    },
+    {
+      "layout": "table",
+      "title": "테마 비교",
+      "headers": ["테마", "배경", "강조색", "적합 상황"],
+      "rows": [
+        ["Dark", "#1A1A2E", "#E94560", "테크/스타트업"],
+        ["Light", "#FFFFFF", "#2563EB", "범용/비즈니스"],
+        ["Consulting", "#FFFFFF", "#C41230", "컨설팅/보고서"]
+      ],
+      "highlight_rows": [0]
+    },
+    {
+      "layout": "timeline",
+      "title": "개발 로드맵",
+      "events": [
+        {"date": "Phase 1", "description": "마크다운 파서 + 기본 레이아웃"},
+        {"date": "Phase 2", "description": "이미지 처리 + URL 캡처"},
+        {"date": "Phase 3", "description": "프리뷰 UI + 테마 시스템"},
+        {"date": "Phase 4", "description": "최적화 + 배포"}
+      ]
+    },
+    {
+      "layout": "closing",
+      "title": "감사합니다",
+      "subtitle": "md-to-pptx로 발표 자료를 빠르게 만드세요",
+      "contact": "github.com/md-to-pptx"
+    }
+  ]
+}

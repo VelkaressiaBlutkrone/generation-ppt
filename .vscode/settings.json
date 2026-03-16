@@ -1,0 +1,257 @@
+{
+  /* ===============================
+   * 📂 Explorer (파일 탐색기)
+   * =============================== */
+  // explorer.sortBy: 파일/폴더 정렬 기준
+  // "name" = 이름순(알파벳/가나다순), "type" = 확장자별, "modified" = 수정일순
+  // "default" = 컨텍스트 기반 (자동 추적)
+  "explorer.sortBy": "name",
+  // explorer.sortOrder: 정렬 방향
+  // "foldersFirst" = 폴더를 파일보다 위에, "filesFirst" = 파일을 먼저, "mixed" = 혼합
+  "explorer.sortOrder": "foldersFirst",
+  // explorer.compactFolders: 빈 중간 폴더 압축 표시 여부
+  // false = src/main/java 같은 계층 구조를 그대로 표시 (권장: 구조 파악 용이)
+  // true = src/main/java 같은 연속 폴더를 한 줄로 합쳐서 표시
+  "explorer.compactFolders": false,
+  // explorer.confirmDelete: 파일/폴더 삭제 시 확인 대화상자 표시 여부
+  // true = 삭제 전 확인 창 표시 (실수 방지)
+  // false = 바로 삭제 (휴지통으로 이동됨)
+  "explorer.confirmDelete": true,
+  /* ===============================
+   * 📝 Editor 기본 동작
+   * =============================== */
+  // editor.tabSize: Tab 키 입력 시 삽입되는 공백 수
+  // JS/TS/JSON: 2 권장, Java/Python: 4 권장
+  "editor.tabSize": 2,
+  // editor.insertSpaces: Tab 키를 스페이스로 대체할지 여부
+  // true = 스페이스 사용 (협업 시 권장), false = 실제 탭 문자 사용
+  "editor.insertSpaces": true,
+  // editor.detectIndentation: 파일 내용 기반 들여쓰기 자동 감지
+  // false = 프로젝트 설정 유지 (editor.tabSize 등 강제 적용)
+  // true = 파일마다 들여쓰기 스타일 자동 감지
+  "editor.detectIndentation": false,
+  // editor.renderWhitespace: 공백 문자 시각화 방식
+  // "none" = 표시 안 함, "boundary" = 단어 사이 공백 숨김/앞뒤 공백만 표시
+  // "selection" = 선택 영역만, "all" = 모든 공백 표시 (트레일링 등)
+  "editor.renderWhitespace": "boundary",
+  // editor.wordWrap: 긴 줄 자동 줄바꿈
+  // "off" = 가로 스크롤 생성, "on" = 줄바꿈, "wordWrapColumn" = 특정 열에서
+  "editor.wordWrap": "off",
+  // editor.minimap.enabled: 우측 편집기 코드 축소 맵(Minimap) 표시 여부
+  // true = 표시 (전체 코드 구조 파악 용이), false = 숨김 (화면 공간 확보)
+  "editor.minimap.enabled": true,
+  // editor.bracketPairColorization.enabled: 괄호 쌍에 색상 입히기
+  // true = { } [ ] ( ) 등에 짝마다 다른 색 적용 (가독성 향상)
+  "editor.bracketPairColorization.enabled": true,
+  // editor.guides.bracketPairs: 괄호 쌍 연결 가이드 선 표시
+  // true = 대괄호/중괄호 쌍을 세로선으로 연결
+  "editor.guides.bracketPairs": true,
+  /* ===============================
+   * 💾 파일 저장 / 포맷
+   * =============================== */
+  // files.eol: 줄바꿈 문자 종류
+  // "\n" = LF (Unix/Mac/Linux 표준), "\r\n" = CRLF (Windows), "auto" = OS 기본값
+  // 협업 시 "\n" 권장 (Git diff 충돌 방지)
+  "files.eol": "\n",
+  // files.insertFinalNewline: 파일 끝에 빈 줄 자동 추가
+  // true = POSIX 표준 준수 (일부 도구/파서가 요구함)
+  "files.insertFinalNewline": true,
+  // files.trimTrailingWhitespace: 줄 끝의 공백 자동 제거
+  // true = 저장 시 트레일링 스페이스 제거 (git diff 깔끔)
+  "files.trimTrailingWhitespace": true,
+  // editor.formatOnSave: 저장 시 자동 포맷팅
+  // true = 저장할 때마다 defaultFormatter 실행
+  "editor.formatOnSave": true,
+  // editor.formatOnPaste: 붙여넣기 시 자동 포맷팅
+  // false = 붙여넣은 내용 그대로 유지 (의도치 않은 변경 방지)
+  "editor.formatOnPaste": false,
+  // editor.formatOnType: 타이핑 중 자동 포맷팅
+  // false = 입력 시 포맷 변경 안 함 (성능 영향 최소화)
+  "editor.formatOnType": false,
+  /* ===============================
+   * 🔍 검색 / 제외 규칙
+   * =============================== */
+  // search.exclude: 검색(전체 찾기)에서 제외할 폴더들
+  // true = 검색 대상에서 제외 (빌드/캐시/의존성 폴더로 검색 속도 향상)
+  "search.exclude": {
+    "**/node_modules": true, // npm/yarn 패키지
+    "**/dist": true, // 빌드 출력물
+    "**/build": true, // Gradle/Maven 빌드 결과물
+    "**/.next": true, // Next.js 빌드 캐시
+    "**/.turbo": true, // Turborepo 캐시
+    "**/.cache": true // 기타 캐시
+  },
+  // files.exclude: 파일 탐색기에서 완전히 숨길 파일/폴더
+  // true = 탐색기에서 아예 표시 안 함 (깔끔한 UI)
+  "files.exclude": {
+    "**/.git": true, // Git 메타데이터
+    "**/.DS_Store": true, // macOS Finder 메타데이터
+    "**/Thumbs.db": true // Windows 썸네일 캐시
+  },
+  /* ===============================
+   * 🌳 Git
+   * =============================== */
+  // git.enableSmartCommit: Staged 없을 때 자동으로 모든 변경사항 포함
+  // true = git add 없이 바로 Commit 시 모든 변경사항 스테이징 후 커밋
+  "git.enableSmartCommit": true,
+  // git.confirmSync: Pull/Push 전 확인 대화상자 표시 여부
+  // false = 확인 없이 바로 동기화 (빠른 작업)
+  "git.confirmSync": false,
+  // git.autofetch: 주기적 원격 저장소 Fetch
+  // true = 백그라운드에서 자동 fetch (브랜치 상태 최신 유지)
+  "git.autofetch": true,
+  /* ===============================
+   * 💻 Terminal
+   * =============================== */
+  // terminal.integrated.defaultProfile.windows: Windows 기본 셸
+  // "PowerShell" = pwsh7, "Command Prompt" = cmd.exe
+  "terminal.integrated.defaultProfile.windows": "PowerShell",
+  // terminal.integrated.profiles.windows: 프로필별 셸 경로 정의
+  "terminal.integrated.profiles.windows": {
+    "PowerShell": {
+      "path": "C:\\Program Files\\PowerShell\\7\\pwsh.exe"
+    }
+  },
+  // terminal.integrated.scrollback: 터미널 스크롤백 버퍼 줄 수
+  // 10000 = 로그 출력 많을 때 위로 스크롤해서 확인 가능
+  "terminal.integrated.scrollback": 10000,
+  /* ===============================
+   * 🎨 UI / UX
+   * =============================== */
+  // workbench.startupEditor: VS Code 시작 시 표시할 화면
+  // "none" = 빈 화면, "welcomePage" = 환영 페이지, "newUntitledFile" = 새 파일
+  "workbench.startupEditor": "none",
+  // workbench.editor.enablePreview: 편집기 미리보기 모드
+  // false = 파일 클릭 시 항상 새 탭으로 열림 (기존 탭 덮어쓰기 안 함)
+  // true = 클릭 시 미리보기(이탤릭), 더블클릭 시 고정 탭
+  "workbench.editor.enablePreview": false,
+  // workbench.tree.indent: 탐색기 트리 들여쓰기 픽셀
+  // 16 = 폴더/파일 계층 구조가 더 넓게 표시됨
+  "workbench.tree.indent": 16,
+  /* ===============================
+   * 🛡️ 안정성 / 품질
+   * =============================== */
+  // editor.codeActionsOnSave: 저장 시 자동 실행할 코드 액션
+  // "explicit" = 저장 시 활성화, "never" = 비활성화
+  // source.fixAll = ESLint/TSLint 등 자동 수정
+  "editor.codeActionsOnSave": {
+    "source.fixAll": "explicit"
+  },
+  /* ===============================
+   * 💙 Dart & Flutter
+   * =============================== */
+  "[dart]": {
+    "editor.formatOnSave": true,
+    "editor.formatOnType": true,
+    // editor.rulers: 세로 가이드선 위치 (칸 수)
+    // [80] = Dart 스타일 가이드 권장 줄 길이
+    "editor.rulers": [80],
+    "editor.tabSize": 2,
+    // editor.snippetsPreventQuickSuggestions: 스니펫이 빠른 제안을 막는지
+    // false = 스니펫과 자동완성 동시 표시
+    "editor.suggest.snippetsPreventQuickSuggestions": false,
+    // editor.selectionHighlight: 같은 단어 선택 시 강조
+    // false = 강조 비활성화 (팝업 가림 방지)
+    "editor.selectionHighlight": false,
+    // editor.wordBasedSuggestions: 단어 기반 자동완성
+    // "off" = IntelliSense 기반만 사용 (더 정확한 제안)
+    "editor.wordBasedSuggestions": "off"
+  },
+  // dart.flutterUiGuides: Flutter 위젯 트리 가이드 선
+  // true = 위젯 중첩 구조를 시각적으로 연결
+  "dart.flutterUiGuides": true,
+  // dart.runPubGetOnPubspecChanges: pubspec.yaml 변경 시 pub get 자동 실행
+  "dart.runPubGetOnPubspecChanges": true,
+  // dart.hotReloadOnSave: 저장 시 핫 리로드 트리거
+  // "all" = 모든 Dart 파일 저장 시, "always" = 더 적극적
+  "dart.hotReloadOnSave": "all",
+  /* ===============================
+   * 💛 JavaScript & React (JSX)
+   * =============================== */
+  "[javascript]": {
+    // esbenp.prettier-vscode = Prettier 확장 프로그램 ID
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": true
+  },
+  "[javascriptreact]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": true
+  },
+  "[typescript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": true
+  },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": true
+  },
+  // emmet.includeLanguages: JS/TS에서 Emmet(HTML 축약) 활성화
+  // React 개발 시 div, span 등 JSX 태그 자동완성 지원
+  "emmet.includeLanguages": {
+    "javascript": "javascriptreact",
+    "typescript": "typescriptreact"
+  },
+  // 파일 이동/이름 변경 시 import 경로 자동 업데이트
+  // "always" = 항상 자동, "prompt" = 물어봄, "never" = 수동
+  "javascript.updateImportsOnFileMove.enabled": "always",
+  "typescript.updateImportsOnFileMove.enabled": "always",
+  /* ===============================
+   * ☕ Java (Spring Boot)
+   * =============================== */
+  "[java]": {
+    // Java는 4칸 들여쓰기가 관례
+    "editor.tabSize": 4,
+    // redhat.java = Java Extension Pack 기본 포맷터
+    "editor.defaultFormatter": "redhat.java",
+    "editor.formatOnSave": true,
+    // source.organizeImports = 미사용 import 제거 + 알파벳순 정렬
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": "explicit"
+    }
+  },
+  // java.configuration.updateBuildConfiguration: Maven/Gradle 변경 감지
+  // "disabled" = 수동 빌드만, "automatic" = 설정 변경 시 자동 반영
+  "java.configuration.updateBuildConfiguration": "disabled",
+  // java.debug.settings.hotCodeReplace: 디버깅 중 코드 변경 시 핫 스왑
+  // "never" = 핫 스왑 비활성화 (재시작 필요), "auto" = 지원 시 시도
+  "java.debug.settings.hotCodeReplace": "never",
+  // files.watcherExclude: 파일 감시에서 제외 (성능/메모리 절약)
+  // build, .gradle 등은 빌드 결과물이라 감시 불필요
+  "files.watcherExclude": {
+    "**/build/**": true,
+    "**/.gradle/**": true,
+    "**/out/**": true,
+    "**/target/**": true,
+    "**/resources/**": true,
+    "**/test/**": true
+  },
+  // java.completion.favoriteStaticMembers: 자동완성 우선 표시할 static 메서드
+  // JUnit, AssertJ, Mockito 등 테스트/유틸리티 클래스 자주 사용
+  "java.completion.favoriteStaticMembers": [
+    "org.junit.jupiter.api.Assertions.*",
+    "org.assertj.core.api.Assertions.*",
+    "org.assertj.core.api.Assertions.*",
+    "org.mockito.Mockito.*",
+    "java.lang.Math.*",
+    "java.util.Objects.*",
+    "java.util.stream.Collectors.*"
+  ],
+  // java.signatureHelp.enabled: 메서드 호출 시 파라미터/타입 정보 표시
+  "java.signatureHelp.enabled": true,
+  // java.debug.settings.console: 디버깅 시 콘솔 출력 위치
+  // "internalConsole" = VS Code 내부 디버그 콘솔
+  "java.debug.settings.console": "internalConsole",
+  // java.compile.nullAnalysis.mode: Null 안전성 분석 모드
+  // "automatic" = 코드 기반 분석, "disabled" = 비활성화
+  "java.compile.nullAnalysis.mode": "automatic",
+  // java.autobuild.enabled: Java 파일 변경 시 자동 증분 빌드
+  "java.autobuild.enabled": true,
+  // java.project.outputPath: Gradle 빌드 출력물 기본 경로
+  "java.project.outputPath": "build/classes/java/main",
+  // java.debug.settings.onBuildFailureProceed: 빌드 실패 시에도 디버그 실행
+  "java.debug.settings.onBuildFailureProceed": true,
+  // java.debug.settings.vmArgs: JVM 디버그 실행 시 인자
+  // UTF-8 인코딩으로 한글 출력 깨짐 방지
+  "java.debug.settings.vmArgs": "-Dfile.encoding=UTF-8 -Dstdout.encoding=UTF-8 -Dstderr.encoding=UTF-8",
+  "liveServer.settings.port": 5501
+}
