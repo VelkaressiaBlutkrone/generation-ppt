@@ -178,9 +178,10 @@ Claude는 콘텐츠를 분석하여 위 규칙을 기반으로 판단하되, 콘
 
 **동작 원리 (3단계 분할):**
 
-1. **h2 기준 분할** — `body_elements` 내의 `## 서브타이틀`(heading level 2) 경계에서 우선 분할한다. 분할된 슬라이드의 제목은 해당 h2 텍스트가 된다.
-2. **높이 기반 추가 분할** — h2 섹션 하나가 여전히 가용 높이를 초과하면, 요소 높이를 추정하여 적절한 지점에서 추가 분할한다.
-3. **제목 자동 생성** — 분할된 슬라이드에 h2 제목이 없으면, 해당 슬라이드의 첫 번째 콘텐츠(h3 heading, 문장 첫 구절, 리스트 키워드 등)에서 자동으로 제목을 생성한다. `(계속)` 같은 임의 접미사는 사용하지 않는다.
+1. **오버플로우 감지** — 슬라이드의 `body_elements` 총 높이가 가용 높이(content 레이아웃 기준 5.8")를 **실제로 초과할 때만** 분할을 수행한다. 초과하지 않으면 h2가 여러 개여도 분할하지 않는다.
+2. **h2 기준 분할** — 오버플로우가 감지되면, `## 서브타이틀`(heading level 2) 경계에서 우선 분할한다. 분할된 슬라이드의 제목은 해당 h2 텍스트가 된다.
+3. **높이 기반 추가 분할** — h2 섹션 하나가 여전히 가용 높이를 초과하면, 요소 높이를 추정하여 적절한 지점에서 추가 분할한다.
+4. **제목 자동 생성** — 분할된 슬라이드에 h2 제목이 없으면, 해당 슬라이드의 첫 번째 콘텐츠(h3 heading, 문장 첫 구절, 리스트 키워드 등)에서 자동으로 제목을 생성한다. `(계속)` 같은 임의 접미사는 사용하지 않는다.
 
 **추가 규칙:**
 - `content-image` 레이아웃에서 분할 시, 첫 슬라이드만 이미지를 유지하고 연속 슬라이드는 `content` 레이아웃으로 변경된다.
@@ -198,10 +199,11 @@ Claude는 콘텐츠를 분석하여 위 규칙을 기반으로 판단하되, 콘
 
 마크다운 본문에서 발견된 URL을 **유형에 따라 자동 분류**하여 처리한다:
 
+- **YouTube URL** (`youtube.com/watch?v=`, `youtu.be/`) → **프리뷰에서 iframe 임베드**, **PPTX에서 썸네일 이미지 + ▶ 재생 버튼 + 클릭 시 YouTube 하이퍼링크**. 스크린샷도 함께 캡처하여 PPTX 이미지로 사용한다. JSON spec에 `video_url` 필드를 추가한다.
 - **이미지 URL** (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.svg`, `.bmp`, `.ico`, `.tiff`, `.avif` 확장자 또는 Content-Type이 `image/*`) → **직접 다운로드**하여 원본 이미지를 슬라이드에 삽입
 - **웹사이트 URL** (위에 해당하지 않는 일반 페이지) → **Playwright 스크린샷 캡처**하여 슬라이드에 삽입
 
-capture.mjs가 URL 유형을 자동 판별하므로, 호출 방식은 동일하다. 이미지 URL이면 다운로드, 웹사이트면 스크린샷을 수행한다.
+capture.mjs가 URL 유형을 자동 판별하므로, 호출 방식은 동일하다. 이미지 URL이면 다운로드, 웹사이트면 스크린샷을 수행한다. YouTube URL도 웹사이트로 캡처하되, JSON spec에 `video_url` 필드를 별도 추가한다.
 
 ### 사전 준비
 
@@ -344,7 +346,7 @@ python <skill-path>/scripts/preview.py <slides-json> <output-html> --images-dir 
 | `title`         | `title`                     | `subtitle`, `date`, `author`              |
 | `section`       | `title`                     | `subtitle`                                |
 | `content`       | `title`, `body` 또는 `body_elements` | `notes`                           |
-| `content-image` | `title`, (`body` 또는 `body_elements`), `image` | `image_position`(left/right), `notes` |
+| `content-image` | `title`, (`body` 또는 `body_elements`), `image` | `image_position`(left/right), `video_url`, `notes` |
 | `image-full`    | `image`                     | `title`, `caption`, `overlay_text`        |
 | `two-images`    | `images`(2개)               | `title`, (`body` 또는 `body_elements`), `captions`, `notes` |
 | `grid-images`   | `images`(3개+)              | `title`, `grid`(2x2/3x1/1x3/2x1), `notes` |

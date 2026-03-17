@@ -833,17 +833,115 @@ function getEffectiveLayout(slideIdx) {{
   return gridMap[s.grid] || 'grid-2x2';
 }}
 
+// ─── body_elements → HTML 렌더링 ───
+function renderBodyElements(elements, t, fontSize) {{
+  if (!elements || !elements.length) return '';
+  fontSize = fontSize || 'clamp(0.6rem,0.9vw,0.8rem)';
+  let html = '';
+  elements.forEach(el => {{
+    switch (el.type) {{
+      case 'heading':
+        if (el.level === 2) {{
+          html += `<div style="font-size:clamp(0.75rem,1.3vw,1rem);font-weight:700;color:${{t.text}};margin:0.5rem 0 0.3rem;padding-bottom:0.2rem;border-bottom:2px solid ${{t.accent}}">${{el.text}}</div>`;
+        }} else {{
+          html += `<div style="font-size:clamp(0.7rem,1.1vw,0.9rem);font-weight:700;color:${{t.text}};margin:0.4rem 0 0.2rem">${{el.text}}</div>`;
+        }}
+        break;
+      case 'paragraph':
+        html += `<div style="font-size:${{fontSize}};color:${{t.text}};line-height:1.6;margin:0.2rem 0">${{el.text}}</div>`;
+        break;
+      case 'bullet_list':
+        html += '<div style="margin:0.2rem 0">';
+        (el.items || []).forEach(item => {{
+          const text = typeof item === 'string' ? item : item.text;
+          const level = typeof item === 'object' ? (item.level || 0) : 0;
+          const indent = level * 1.2;
+          const bullets = ['●','○','■','▸'];
+          html += `<div style="font-size:${{fontSize}};color:${{t.text}};line-height:1.8;padding-left:${{indent + 1}}rem;position:relative">
+            <span style="position:absolute;left:${{indent}}rem;color:${{t.accent}};font-size:0.5em;top:0.35em">${{bullets[level] || '●'}}</span>${{text}}
+          </div>`;
+        }});
+        html += '</div>';
+        break;
+      case 'numbered_list':
+        html += '<div style="margin:0.2rem 0">';
+        (el.items || []).forEach((item, i) => {{
+          const text = typeof item === 'string' ? item : item.text;
+          html += `<div style="font-size:${{fontSize}};color:${{t.text}};line-height:1.8;padding-left:1.5rem;position:relative">
+            <span style="position:absolute;left:0;color:${{t.accent}};font-weight:700">${{i+1}}.</span>${{text}}
+          </div>`;
+        }});
+        html += '</div>';
+        break;
+      case 'blockquote':
+        html += `<div style="margin:0.3rem 0;padding:0.4rem 0.8rem;background:${{t.secondary}};border-left:3px solid ${{t.accent}};border-radius:0 6px 6px 0;font-style:italic;font-size:${{fontSize}};color:${{t.text}};line-height:1.6">${{el.text}}</div>`;
+        break;
+      case 'divider':
+        html += `<hr style="border:none;border-top:1px solid ${{t.subtitle}}40;margin:0.4rem 0" />`;
+        break;
+      case 'code_block':
+        const lang = el.language || '';
+        html += `<div style="margin:0.3rem 0;background:#1e1e2e;border-radius:6px;padding:0.5rem 0.7rem;position:relative">
+          ${{lang ? `<span style="position:absolute;top:0.3rem;right:0.5rem;font-size:0.55rem;color:#888">${{lang}}</span>` : ''}}
+          <pre style="margin:0;font-family:Consolas,'Courier New',monospace;font-size:clamp(0.5rem,0.7vw,0.7rem);color:#e0e0e0;white-space:pre-wrap;line-height:1.5">${{(el.code||'').replace(/</g,'&lt;').replace(/>/g,'&gt;')}}</pre>
+        </div>`;
+        break;
+      case 'inline_table':
+        html += '<div style="margin:0.3rem 0;overflow:auto">';
+        html += `<table style="width:100%;border-collapse:collapse;font-size:clamp(0.5rem,0.75vw,0.7rem)">`;
+        html += '<thead><tr>';
+        (el.headers || []).forEach(h => {{
+          html += `<th style="padding:0.3rem 0.5rem;text-align:left;border-bottom:2px solid ${{t.accent}};color:${{t.text}};font-weight:600">${{h}}</th>`;
+        }});
+        html += '</tr></thead><tbody>';
+        (el.rows || []).forEach((row, ri) => {{
+          const bg = ri % 2 === 1 ? t.secondary : 'transparent';
+          html += `<tr style="background:${{bg}}">`;
+          row.forEach(cell => {{
+            html += `<td style="padding:0.25rem 0.5rem;border-bottom:1px solid ${{t.secondary}};color:${{t.text}}">${{cell}}</td>`;
+          }});
+          html += '</tr>';
+        }});
+        html += '</tbody></table></div>';
+        break;
+    }}
+  }});
+  return html;
+}}
+
+// ─── YouTube 헬퍼 ───
+function extractYouTubeId(url) {{
+  if (!url) return null;
+  const m = url.match(/(?:youtube\\.com\\/watch\\?v=|youtu\\.be\\/|youtube\\.com\\/embed\\/)([^&?/]+)/);
+  return m ? m[1] : null;
+}}
+
 // ─── 슬라이드 렌더링 (공통) ───
 function renderSlideContent(s, t, containerClass, slideIdx) {{
   const layout = s.layout || 'content';
   const title = s.title || '';
   const subtitle = s.subtitle || '';
-  const body = s.body || '';
+  const body = s.body_elements ? renderBodyElements(s.body_elements, t) : (s.body || '');
   const code = s.code || '';
   const imgs = getSlideImages(slideIdx);
   const captions = s.captions || [];
 
   let html = '';
+
+  // ─── YouTube 영상 슬라이드 ───
+  if (s.video_url) {{
+    const videoId = extractYouTubeId(s.video_url);
+    if (videoId) {{
+      if (title) html += `<div class="s-title" style="color:${{t.text}};font-size:clamp(0.8rem,1.8vw,1.2rem);width:100%;text-align:left">${{title}}</div>`;
+      html += `<div style="display:flex;gap:0.8rem;width:100%;flex:1;min-height:0">
+        ${{body ? `<div style="flex:1;overflow:auto"><div style="color:${{t.text}}">${{body}}</div></div>` : ''}}
+        <div style="flex:${{body ? '1.2' : '2'}};min-height:0">
+          <iframe src="https://www.youtube.com/embed/${{videoId}}?rel=0" style="width:100%;height:100%;border:none;border-radius:8px" allowfullscreen></iframe>
+        </div>
+      </div>`;
+      return html;
+    }}
+  }}
 
   // content-image: 좌측 텍스트 + 우측 이미지
   if (layout === 'content-image' && imgs.length > 0) {{

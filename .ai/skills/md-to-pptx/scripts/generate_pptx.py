@@ -256,11 +256,11 @@ def _estimate_element_height(elem, width_inches=11.733):
 
     elif elem_type == "bullet_list":
         items = elem.get("items", [])
-        return 0.38 * len(items) + 0.15 + gap
+        return 0.32 * len(items) + 0.1 + gap
 
     elif elem_type == "numbered_list":
         items = elem.get("items", [])
-        return 0.38 * len(items) + 0.15 + gap
+        return 0.32 * len(items) + 0.1 + gap
 
     elif elem_type == "blockquote":
         text = elem.get("text", "")
@@ -268,7 +268,7 @@ def _estimate_element_height(elem, width_inches=11.733):
         return 0.35 * line_count + 0.3 + gap
 
     elif elem_type == "divider":
-        return 0.3 + gap
+        return 0.15 + gap
 
     elif elem_type == "code_block":
         code = elem.get("code", "")
@@ -289,7 +289,7 @@ def _get_layout_dimensions(layout):
     타이틀 영역(~0.85") + 상하 마진을 고려한 값이다.
     """
     content_w = 11.733  # CONTENT_WIDTH in inches
-    content_h = 5.0     # 보수적 가용 높이 (타이틀 + 여유 마진 고려)
+    content_h = 5.8     # 가용 높이 (실제 렌더링 여유 포함)
 
     if layout == "content":
         return content_h, content_w
@@ -1146,14 +1146,42 @@ def layout_content_image(prs, slide_data, theme):
             p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
             add_text_with_markdown(p, line, theme, font_size=Pt(18))
 
-    # 이미지 영역 (우측 50%)
+    # 이미지/비디오 영역 (우측 50%)
+    img_left = MARGIN_LEFT + body_width + Inches(0.4)
+    img_top = body_top
+    img_width = CONTENT_WIDTH * 0.5
+    img_height = SLIDE_HEIGHT - MARGIN_BOTTOM - body_top
+
+    video_url = slide_data.get("video_url", "")
     img_path = slide_data.get("image")
-    if img_path and os.path.exists(img_path):
-        img_left = MARGIN_LEFT + body_width + Inches(0.4)
-        img_top = body_top
-        img_width = CONTENT_WIDTH * 0.5
-        img_height = SLIDE_HEIGHT - MARGIN_BOTTOM - body_top
-        
+
+    if video_url and img_path and os.path.exists(img_path):
+        # YouTube 썸네일 이미지 + 재생 버튼 오버레이 + 하이퍼링크
+        pic = slide.shapes.add_picture(img_path, img_left, img_top, width=img_width)
+        pic.click_action.hyperlink.address = video_url
+
+        # 재생 버튼 (▶) 오버레이
+        play_size = Inches(0.8)
+        play_left = img_left + (img_width - play_size) // 2
+        play_top = img_top + (img_height - play_size) // 2
+        play_btn = slide.shapes.add_shape(
+            MSO_SHAPE.OVAL, play_left, play_top, play_size, play_size
+        )
+        play_btn.fill.solid()
+        play_btn.fill.fore_color.rgb = RGBColor(255, 0, 0)
+        play_btn.fill.transparency = 0.15
+        play_btn.line.fill.background()
+        play_btn.click_action.hyperlink.address = video_url
+        tf_play = play_btn.text_frame
+        tf_play.word_wrap = False
+        p_play = tf_play.paragraphs[0]
+        p_play.alignment = PP_ALIGN.CENTER
+        run_play = p_play.add_run()
+        run_play.text = "▶"
+        run_play.font.size = Pt(28)
+        run_play.font.color.rgb = RGBColor(255, 255, 255)
+        run_play.font.bold = True
+    elif img_path and os.path.exists(img_path):
         # 가로세로 비율 유지하며 채우기
         slide.shapes.add_picture(img_path, img_left, img_top, width=img_width)
 
