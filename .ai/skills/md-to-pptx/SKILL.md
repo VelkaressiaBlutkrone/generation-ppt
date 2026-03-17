@@ -80,12 +80,66 @@ pwd
 
 ### 파싱 규칙
 
-- `#` (h1)만 슬라이드 구분자로 사용한다. `##`, `###` 등은 슬라이드 내부 구조로 처리한다.
+- `#` (h1)만 슬라이드 구분자로 사용한다. `##`, `###` 등은 슬라이드 내부의 구조적 요소로 처리한다.
 - 첫 번째 `#` 이전의 내용은 무시하거나, 내용이 있으면 첫 슬라이드의 부제목/메타 정보로 활용한다.
 - 각 슬라이드 섹션에서 다음을 감지한다:
-  - **텍스트**: 일반 본문, 리스트, 표, 코드블록
-  - **이미지**: `![alt](경로)` 패턴 → 로컬 파일 경로 또는 URL
-  - **URL**: `http://` 또는 `https://`로 시작하는 링크 (이미지가 아닌 것)
+  - **로컬 이미지**: `![alt](로컬경로)` 패턴 → 로컬 파일 경로
+  - **이미지 URL**: `![alt](https://...)` 패턴 또는 이미지 확장자(`.png`, `.jpg`, `.gif`, `.webp`, `.svg` 등)로 끝나는 URL → **직접 다운로드**하여 슬라이드에 원본 이미지로 삽입
+  - **웹사이트 URL**: `http://` 또는 `https://`로 시작하는 링크 중 이미지가 아닌 것 → **스크린샷 캡처**하여 슬라이드에 삽입
+  - **구조적 텍스트 요소**: 아래 마크다운 문법에 따라 `body_elements` 배열로 구조화
+
+### 마크다운 문법 → body_elements 매핑 (필수)
+
+슬라이드 내부(`#` 사이)의 마크다운 요소를 분석하여, 단순 문자열 `body` 대신 **`body_elements` 배열**로 구조화한다. 각 요소는 대응하는 슬라이드 디자인으로 렌더링된다.
+
+| 마크다운 문법 | type | 슬라이드 디자인 | 설명 |
+|---|---|---|---|
+| `## 제목` | `heading` (level:2) | 24pt Bold + accent 하단 라인 | 슬라이드 내 섹션 구분 |
+| `### 소제목` | `heading` (level:3) | 20pt Bold | 소항목 제목 |
+| 일반 텍스트 | `paragraph` | 18pt 본문 텍스트 | 줄바꿈 단위로 분리 |
+| `- 항목` / `* 항목` | `bullet_list` | accent 색상 불릿 + 들여쓰기 | 다단계 지원 (level 0~3) |
+| `1. 항목` | `numbered_list` | accent 색상 번호 + 들여쓰기 | 순서가 있는 목록 |
+| `> 인용구` | `blockquote` | secondary 배경 + 좌측 accent 바 + 이탤릭 | 강조/인용 |
+| `---` | `divider` | 수평 구분선 | 슬라이드 내 시각적 분리 |
+| ` ```lang ``` ` | `code_block` | 어두운 배경 + Consolas 모노스페이스 + 언어 라벨 | 코드 표시 |
+| `\| 헤더 \| ... \|` | `inline_table` | 미니멀 테이블 (accent 헤더, 줄무늬) | 본문 내 소형 테이블 |
+
+**body_elements 구조 예시:**
+
+```json
+{
+  "layout": "content",
+  "title": "기술 스택",
+  "body_elements": [
+    { "type": "heading", "level": 2, "text": "백엔드" },
+    { "type": "bullet_list", "items": ["Spring Boot 4.0", "Java 21", "MySQL 8.0"] },
+    { "type": "divider" },
+    { "type": "heading", "level": 2, "text": "프론트엔드" },
+    { "type": "paragraph", "text": "Vanilla JS 기반의 경량 프론트엔드" },
+    { "type": "blockquote", "text": "SPA 프레임워크 없이 순수 JS로 구현하여 번들 사이즈를 최소화" },
+    { "type": "code_block", "language": "java", "code": "@RestController\npublic class ApiController {\n    ...\n}" },
+    { "type": "inline_table", "headers": ["기술", "버전"], "rows": [["Spring Boot", "4.0"], ["Java", "21"]] }
+  ]
+}
+```
+
+**중첩 리스트 표현:**
+
+리스트 항목에 레벨 정보를 포함하여 다단계를 표현한다:
+
+```json
+{
+  "type": "bullet_list",
+  "items": [
+    "최상위 항목",
+    { "text": "하위 항목", "level": 1 },
+    { "text": "더 깊은 항목", "level": 2 },
+    "다시 최상위"
+  ]
+}
+```
+
+**호환성**: `body_elements`가 없으면 기존 `body` 문자열 방식으로 렌더링한다. 두 필드가 모두 있으면 `body_elements`를 우선 사용한다.
 
 ### URL 완전성 규칙 (필수)
 
@@ -118,11 +172,36 @@ pwd
 
 Claude는 콘텐츠를 분석하여 위 규칙을 기반으로 판단하되, 콘텐츠의 의미와 맥락도 함께 고려하여 최적의 레이아웃을 선택한다. 예를 들어 비교 내용이면 `comparison`, 타임라인이면 `timeline`, KPI 수치가 있으면 `kpi` 등으로 판단할 수 있다.
 
+### 콘텐츠 오버플로우 자동 분할
+
+한 `#` 섹션의 내용이 슬라이드 한 장에 담기엔 너무 많으면, generate_pptx.py가 **자동으로 여러 슬라이드로 분할**한다. 이 기능 덕분에 텍스트가 슬라이드 밖으로 벗어나거나 요소끼리 겹치는 문제가 방지된다.
+
+**동작 원리 (3단계 분할):**
+
+1. **h2 기준 분할** — `body_elements` 내의 `## 서브타이틀`(heading level 2) 경계에서 우선 분할한다. 분할된 슬라이드의 제목은 해당 h2 텍스트가 된다.
+2. **높이 기반 추가 분할** — h2 섹션 하나가 여전히 가용 높이를 초과하면, 요소 높이를 추정하여 적절한 지점에서 추가 분할한다.
+3. **제목 자동 생성** — 분할된 슬라이드에 h2 제목이 없으면, 해당 슬라이드의 첫 번째 콘텐츠(h3 heading, 문장 첫 구절, 리스트 키워드 등)에서 자동으로 제목을 생성한다. `(계속)` 같은 임의 접미사는 사용하지 않는다.
+
+**추가 규칙:**
+- `content-image` 레이아웃에서 분할 시, 첫 슬라이드만 이미지를 유지하고 연속 슬라이드는 `content` 레이아웃으로 변경된다.
+- 요소 간에는 `0.2"` 수직 여백이 자동 적용된다.
+- 타이틀 슬라이드(`layout_title`, `layout_closing`)는 제목 줄 수에 따라 accent bar와 부제목 위치가 동적으로 조정된다.
+
+**JSON spec 작성 시 참고:**
+- `body_elements`에 콘텐츠를 최대한 충실히 담되, 분량 초과를 걱정하지 않아도 된다.
+- 생성 엔진이 자동으로 적절한 지점에서 분할한다.
+- 다만 의미적으로 분리가 자연스러운 경우(예: 하위 주제가 2개 이상), 파싱 단계에서 미리 2개 슬라이드로 나누는 것이 더 보기 좋을 수 있다.
+
 ---
 
-## Step 2: URL 스크린샷 캡처
+## Step 2: URL 처리 (스크린샷 캡처 / 이미지 다운로드)
 
-마크다운 본문에 이미지가 아닌 URL이 발견되면, 해당 웹페이지를 스크린샷으로 캡처하여 슬라이드에 이미지로 삽입한다.
+마크다운 본문에서 발견된 URL을 **유형에 따라 자동 분류**하여 처리한다:
+
+- **이미지 URL** (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.svg`, `.bmp`, `.ico`, `.tiff`, `.avif` 확장자 또는 Content-Type이 `image/*`) → **직접 다운로드**하여 원본 이미지를 슬라이드에 삽입
+- **웹사이트 URL** (위에 해당하지 않는 일반 페이지) → **Playwright 스크린샷 캡처**하여 슬라이드에 삽입
+
+capture.mjs가 URL 유형을 자동 판별하므로, 호출 방식은 동일하다. 이미지 URL이면 다운로드, 웹사이트면 스크린샷을 수행한다.
 
 ### 사전 준비
 
@@ -132,21 +211,28 @@ npm ls playwright 2>/dev/null || npm install playwright
 npx playwright install chromium
 ```
 
-### 캡처 실행
+### 실행
 
 ```bash
 node <skill-path>/scripts/capture.mjs <URL> <저장경로.png> [옵션]
 ```
 
-| 옵션          | 설명                       | 기본값     |
-| ------------- | -------------------------- | ---------- |
-| `--full-page` | 전체 페이지 스크롤 캡처    | viewport만 |
-| `--width`     | 뷰포트 너비 (px)           | 1920       |
-| `--height`    | 뷰포트 높이 (px)           | 1080       |
-| `--wait`      | 로드 후 대기 시간 (초)     | 2          |
-| `--device`    | 모바일 디바이스 에뮬레이션 | 없음       |
+| 옵션          | 설명                                    | 기본값     |
+| ------------- | --------------------------------------- | ---------- |
+| `--full-page` | 전체 페이지 스크롤 캡처 (웹사이트만)   | viewport만 |
+| `--width`     | 뷰포트 너비 px (웹사이트만)            | 1920       |
+| `--height`    | 뷰포트 높이 px (웹사이트만)            | 1080       |
+| `--wait`      | 로드 후 대기 시간 초 (웹사이트만)      | 2          |
+| `--device`    | 모바일 디바이스 에뮬레이션 (웹사이트만) | 없음       |
 
-캡처한 이미지는 출력 PPTX와 같은 디렉토리의 `_captures/` 폴더에 저장한다. 파일명은 URL의 도메인 기반으로 자동 생성한다.
+### URL 유형 판별 로직
+
+1. URL 경로의 확장자가 이미지 확장자 목록에 포함되면 → 이미지로 판별
+2. 확장자로 판별이 안 되면 → HTTP HEAD 요청으로 `Content-Type` 확인
+3. `Content-Type`이 `image/*`이면 → 이미지 다운로드
+4. 그 외 → 웹사이트 스크린샷 캡처
+
+캡처/다운로드한 이미지는 출력 PPTX와 같은 디렉토리의 `_captures/` 폴더에 저장한다. 파일명은 URL의 도메인 기반으로 자동 생성한다.
 
 ---
 
@@ -233,7 +319,10 @@ python <skill-path>/scripts/preview.py <slides-json> <output-html> --images-dir 
     {
       "layout": "content-image",
       "title": "슬라이드 제목",
-      "body": "- 항목 1\n- 항목 2\n- **강조** 텍스트",
+      "body_elements": [
+        { "type": "bullet_list", "items": ["항목 1", "항목 2", "**강조** 텍스트"] },
+        { "type": "blockquote", "text": "핵심 메시지를 강조" }
+      ],
       "image": "./images/photo.png",
       "notes": ""
     },
@@ -254,17 +343,19 @@ python <skill-path>/scripts/preview.py <slides-json> <output-html> --images-dir 
 | --------------- | --------------------------- | ----------------------------------------- |
 | `title`         | `title`                     | `subtitle`, `date`, `author`              |
 | `section`       | `title`                     | `subtitle`                                |
-| `content`       | `title`, `body`             | `notes`                                   |
-| `content-image` | `title`, `body`, `image`    | `image_position`(left/right), `notes`     |
+| `content`       | `title`, `body` 또는 `body_elements` | `notes`                           |
+| `content-image` | `title`, (`body` 또는 `body_elements`), `image` | `image_position`(left/right), `notes` |
 | `image-full`    | `image`                     | `title`, `caption`, `overlay_text`        |
-| `two-images`    | `images`(2개)               | `title`, `captions`, `notes`              |
+| `two-images`    | `images`(2개)               | `title`, (`body` 또는 `body_elements`), `captions`, `notes` |
 | `grid-images`   | `images`(3개+)              | `title`, `grid`(2x2/3x1/1x3/2x1), `notes` |
-| `comparison`    | `title`, `left`, `right`    | `notes`                                   |
+| `comparison`    | `title`, `left`, `right`    | `notes` (left/right 내에 `body_elements` 사용 가능) |
 | `table`         | `title`, `headers`, `rows`  | `highlight_rows`, `notes`                 |
 | `code`          | `title`, `code`, `language` | `notes`                                   |
 | `kpi`           | `title`, `metrics`          | `notes`                                   |
 | `timeline`      | `title`, `events`           | `notes`                                   |
 | `closing`       | `title`                     | `subtitle`, `contact`                     |
+
+> **참고**: `body_elements`와 `body`가 동시에 있으면 `body_elements`를 우선 사용한다. 마크다운 문서 파싱 시에는 구조적 요소(제목, 인용구, 코드블록, 테이블, 구분선 등)가 포함된 경우 반드시 `body_elements`를 사용한다.
 
 ---
 
