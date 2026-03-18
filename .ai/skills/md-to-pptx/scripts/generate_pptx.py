@@ -919,9 +919,10 @@ def _render_inline_table(slide, elem, theme, left, top, width, remaining):
         set_font_with_ea(run)
 
     # 데이터 행
+    cols_count = len(headers)
     for r, row_data in enumerate(rows):
         row_bg = t_row_even if r % 2 == 0 else t_row_odd
-        for c, val in enumerate(row_data):
+        for c, val in enumerate(row_data[:cols_count]):
             cell = table.cell(r + 1, c)
             cell.fill.solid()
             cell.fill.fore_color.rgb = hex_to_rgb(row_bg)
@@ -1461,9 +1462,10 @@ def layout_table(prs, slide_data, theme):
         set_font_with_ea(run)
 
     # 데이터 행
+    cols_count = len(headers)
     for r, row_data in enumerate(rows):
         row_bg = t_row_even if r % 2 == 0 else t_row_odd
-        for c, val in enumerate(row_data):
+        for c, val in enumerate(row_data[:cols_count]):
             cell = table.cell(r + 1, c)
             cell.fill.solid()
             cell.fill.fore_color.rgb = hex_to_rgb(row_bg)
@@ -1773,19 +1775,23 @@ def generate(spec_path: str, output_path: str, choices_path: str = None):
     prs.slide_height = SLIDE_HEIGHT
 
     for i, slide_data in enumerate(spec.get("slides", [])):
-        # choices.json에 해당 슬라이드 오버라이드가 있으면 반영
-        if str(i) in slide_overrides:
-            override = slide_overrides[str(i)]
-            if "layout" in override:
-                slide_data["layout"] = override["layout"]
+        try:
+            # choices.json에 해당 슬라이드 오버라이드가 있으면 반영
+            if str(i) in slide_overrides:
+                override = slide_overrides[str(i)]
+                if "layout" in override:
+                    slide_data["layout"] = override["layout"]
 
-        layout = slide_data.get("layout", "content")
-        handler = LAYOUT_HANDLERS.get(layout, layout_content)
-        slide = handler(prs, slide_data, theme)
+            layout = slide_data.get("layout", "content")
+            handler = LAYOUT_HANDLERS.get(layout, layout_content)
+            slide = handler(prs, slide_data, theme)
 
-        notes = slide_data.get("notes", "")
-        if notes:
-            add_speaker_notes(slide, notes)
+            notes = slide_data.get("notes", "")
+            if notes:
+                add_speaker_notes(slide, notes)
+        except Exception as e:
+            print(f"  [WARNING] 슬라이드 {i+1} 렌더링 실패: {e}")
+            continue
 
     prs.save(output_path)
     print(f"PPTX 생성 완료: {output_path}")

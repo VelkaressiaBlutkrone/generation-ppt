@@ -13,6 +13,7 @@ import sys
 import os
 import base64
 import http.server
+import random
 import webbrowser
 import threading
 from pathlib import Path
@@ -833,6 +834,11 @@ function getEffectiveLayout(slideIdx) {{
   return gridMap[s.grid] || 'grid-2x2';
 }}
 
+// ─── HTML 이스케이프 (XSS 방지) ───
+function esc(s) {{
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}}
+
 // ─── body_elements → HTML 렌더링 ───
 function renderBodyElements(elements, t, fontSize) {{
   if (!elements || !elements.length) return '';
@@ -842,13 +848,13 @@ function renderBodyElements(elements, t, fontSize) {{
     switch (el.type) {{
       case 'heading':
         if (el.level === 2) {{
-          html += `<div style="font-size:clamp(0.75rem,1.3vw,1rem);font-weight:700;color:${{t.text}};margin:0.5rem 0 0.3rem;padding-bottom:0.2rem;border-bottom:2px solid ${{t.accent}}">${{el.text}}</div>`;
+          html += `<div style="font-size:clamp(0.75rem,1.3vw,1rem);font-weight:700;color:${{t.text}};margin:0.5rem 0 0.3rem;padding-bottom:0.2rem;border-bottom:2px solid ${{t.accent}}">${{esc(el.text)}}</div>`;
         }} else {{
-          html += `<div style="font-size:clamp(0.7rem,1.1vw,0.9rem);font-weight:700;color:${{t.text}};margin:0.4rem 0 0.2rem">${{el.text}}</div>`;
+          html += `<div style="font-size:clamp(0.7rem,1.1vw,0.9rem);font-weight:700;color:${{t.text}};margin:0.4rem 0 0.2rem">${{esc(el.text)}}</div>`;
         }}
         break;
       case 'paragraph':
-        html += `<div style="font-size:${{fontSize}};color:${{t.text}};line-height:1.6;margin:0.2rem 0">${{el.text}}</div>`;
+        html += `<div style="font-size:${{fontSize}};color:${{t.text}};line-height:1.6;margin:0.2rem 0">${{esc(el.text)}}</div>`;
         break;
       case 'bullet_list':
         html += '<div style="margin:0.2rem 0">';
@@ -858,7 +864,7 @@ function renderBodyElements(elements, t, fontSize) {{
           const indent = level * 1.2;
           const bullets = ['●','○','■','▸'];
           html += `<div style="font-size:${{fontSize}};color:${{t.text}};line-height:1.8;padding-left:${{indent + 1}}rem;position:relative">
-            <span style="position:absolute;left:${{indent}}rem;color:${{t.accent}};font-size:0.5em;top:0.35em">${{bullets[level] || '●'}}</span>${{text}}
+            <span style="position:absolute;left:${{indent}}rem;color:${{t.accent}};font-size:0.5em;top:0.35em">${{bullets[level] || '●'}}</span>${{esc(text)}}
           </div>`;
         }});
         html += '</div>';
@@ -868,13 +874,13 @@ function renderBodyElements(elements, t, fontSize) {{
         (el.items || []).forEach((item, i) => {{
           const text = typeof item === 'string' ? item : item.text;
           html += `<div style="font-size:${{fontSize}};color:${{t.text}};line-height:1.8;padding-left:1.5rem;position:relative">
-            <span style="position:absolute;left:0;color:${{t.accent}};font-weight:700">${{i+1}}.</span>${{text}}
+            <span style="position:absolute;left:0;color:${{t.accent}};font-weight:700">${{i+1}}.</span>${{esc(text)}}
           </div>`;
         }});
         html += '</div>';
         break;
       case 'blockquote':
-        html += `<div style="margin:0.3rem 0;padding:0.4rem 0.8rem;background:${{t.secondary}};border-left:3px solid ${{t.accent}};border-radius:0 6px 6px 0;font-style:italic;font-size:${{fontSize}};color:${{t.text}};line-height:1.6">${{el.text}}</div>`;
+        html += `<div style="margin:0.3rem 0;padding:0.4rem 0.8rem;background:${{t.secondary}};border-left:3px solid ${{t.accent}};border-radius:0 6px 6px 0;font-style:italic;font-size:${{fontSize}};color:${{t.text}};line-height:1.6">${{esc(el.text)}}</div>`;
         break;
       case 'divider':
         html += `<hr style="border:none;border-top:1px solid ${{t.subtitle}}40;margin:0.4rem 0" />`;
@@ -891,14 +897,14 @@ function renderBodyElements(elements, t, fontSize) {{
         html += `<table style="width:100%;border-collapse:collapse;font-size:clamp(0.5rem,0.75vw,0.7rem)">`;
         html += '<thead><tr>';
         (el.headers || []).forEach(h => {{
-          html += `<th style="padding:0.3rem 0.5rem;text-align:left;border-bottom:2px solid ${{t.accent}};color:${{t.text}};font-weight:600">${{h}}</th>`;
+          html += `<th style="padding:0.3rem 0.5rem;text-align:left;border-bottom:2px solid ${{t.accent}};color:${{t.text}};font-weight:600">${{esc(h)}}</th>`;
         }});
         html += '</tr></thead><tbody>';
         (el.rows || []).forEach((row, ri) => {{
           const bg = ri % 2 === 1 ? t.secondary : 'transparent';
           html += `<tr style="background:${{bg}}">`;
           row.forEach(cell => {{
-            html += `<td style="padding:0.25rem 0.5rem;border-bottom:1px solid ${{t.secondary}};color:${{t.text}}">${{cell}}</td>`;
+            html += `<td style="padding:0.25rem 0.5rem;border-bottom:1px solid ${{t.secondary}};color:${{t.text}}">${{esc(cell)}}</td>`;
           }});
           html += '</tr>';
         }});
@@ -919,9 +925,9 @@ function extractYouTubeId(url) {{
 // ─── 슬라이드 렌더링 (공통) ───
 function renderSlideContent(s, t, containerClass, slideIdx) {{
   const layout = s.layout || 'content';
-  const title = s.title || '';
-  const subtitle = s.subtitle || '';
-  const body = s.body_elements ? renderBodyElements(s.body_elements, t) : (s.body || '');
+  const title = esc(s.title || '');
+  const subtitle = esc(s.subtitle || '');
+  const body = s.body_elements ? renderBodyElements(s.body_elements, t) : esc(s.body || '');
   const code = s.code || '';
   const imgs = getSlideImages(slideIdx);
   const captions = s.captions || [];
@@ -1514,8 +1520,6 @@ if (location.protocol === 'file:') {{
     print(f"  choices 저장 경로: {choices_full_path}")
 
 
-import random
-
 def serve_preview(html_path: str, choices_path: str, port: int = 0):
     """로컬 HTTP 서버로 프리뷰를 제공하고, POST /save-choices로 JSON을 저장한다.
     port=0이면 10000-60000 사이의 랜덤 포트를 시도한다."""
@@ -1530,17 +1534,28 @@ def serve_preview(html_path: str, choices_path: str, port: int = 0):
             if self.path == "/save-choices":
                 length = int(self.headers.get("Content-Length", 0))
                 data = json.loads(self.rfile.read(length).decode("utf-8"))
-                
+
                 # 클라이언트가 보낸 경로 또는 기본 경로 사용
                 target_path = data.get("path", choices_path)
                 choices_data = data.get("choices", {})
-                
+
+                # 경로 검증: html_dir 내부로만 쓰기 허용 (path traversal 방지)
+                resolved = os.path.realpath(target_path)
+                allowed_dir = os.path.realpath(html_dir)
+                if not resolved.startswith(allowed_dir + os.sep) and resolved != allowed_dir:
+                    print(f"\n[BLOCKED] 허용 범위 밖 경로 쓰기 시도 차단: {target_path}")
+                    self.send_response(403)
+                    self.send_header("Content-Type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(b'{"error":"path outside allowed directory"}')
+                    return
+
                 # 디렉토리 생성
-                target_dir = os.path.dirname(target_path)
+                target_dir = os.path.dirname(resolved)
                 if target_dir and not os.path.exists(target_dir):
                     os.makedirs(target_dir, exist_ok=True)
-                
-                with open(target_path, "w", encoding="utf-8") as f:
+
+                with open(resolved, "w", encoding="utf-8") as f:
                     json.dump(choices_data, f, ensure_ascii=False, indent=2)
                 
                 self.send_response(200)

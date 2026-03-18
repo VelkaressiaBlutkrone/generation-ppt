@@ -1,7 +1,8 @@
 /**
- * 웹사이트 스크린샷 캡처 스크립트
+ * 웹사이트 스크린샷 캡처 / 이미지 다운로드 스크립트
  *
- * Playwright를 사용하여 URL의 웹페이지를 PNG 이미지로 캡처한다.
+ * URL이 이미지 파일이면 직접 다운로드하고,
+ * 웹사이트이면 Playwright를 사용하여 스크린샷을 캡처한다.
  *
  * Usage:
  *   node capture.mjs <URL> <저장경로> [옵션]
@@ -15,9 +16,48 @@
  */
 
 import { chromium, devices } from "playwright";
-import { mkdirSync } from "fs";
-import { dirname, resolve } from "path";
+import { mkdirSync, writeFileSync } from "fs";
+import { dirname, resolve, extname } from "path";
 import { parseArgs } from "util";
+
+const IMAGE_EXTENSIONS = new Set([
+  ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp", ".ico", ".tiff", ".avif",
+]);
+
+/**
+ * URL이 이미지인지 판별한다.
+ * 1) 확장자 기반 판별
+ * 2) HTTP HEAD 요청의 Content-Type 판별
+ */
+async function isImageUrl(url) {
+  // 확장자 판별 (쿼리스트링 제거 후)
+  const pathname = new URL(url).pathname;
+  const ext = extname(pathname).toLowerCase();
+  if (IMAGE_EXTENSIONS.has(ext)) return true;
+
+  // Content-Type 판별
+  try {
+    const res = await fetch(url, { method: "HEAD", redirect: "follow", signal: AbortSignal.timeout(10000) });
+    const contentType = res.headers.get("content-type") || "";
+    return contentType.startsWith("image/");
+  } catch (e) {
+    console.error(`HEAD check failed for ${url}: ${e.message}`);
+    return false;
+  }
+}
+
+/**
+ * 이미지 URL을 직접 다운로드한다.
+ */
+async function downloadImage(url, outputPath) {
+  const res = await fetch(url, { redirect: "follow", signal: AbortSignal.timeout(30000) });
+  if (!res.ok) {
+    throw new Error(`이미지 다운로드 실패: HTTP ${res.status} ${res.statusText}`);
+  }
+  const buffer = Buffer.from(await res.arrayBuffer());
+  writeFileSync(outputPath, buffer);
+  console.log(`이미지 다운로드 완료: ${outputPath}`);
+}
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
@@ -56,6 +96,18 @@ const deviceName = values.device;
 const absOutput = resolve(outputPath);
 mkdirSync(dirname(absOutput), { recursive: true });
 
+// 이미지 URL이면 직접 다운로드하고 종료
+if (await isImageUrl(url)) {
+  try {
+    await downloadImage(url, absOutput);
+    process.exit(0);
+  } catch (e) {
+    console.error(e.message);
+    process.exit(1);
+  }
+}
+
+// 웹사이트 URL이면 Playwright로 스크린샷 캡처
 const browser = await chromium.launch({ headless: true });
 
 let context;
@@ -84,7 +136,8 @@ const page = await context.newPage();
 
 try {
   await page.goto(url, { waitUntil: "networkidle", timeout: 30000 });
-} catch {
+} catch (e) {
+  console.error(`networkidle failed, retrying with load: ${e.message}`);
   try {
     await page.goto(url, { waitUntil: "load", timeout: 30000 });
   } catch (e) {
