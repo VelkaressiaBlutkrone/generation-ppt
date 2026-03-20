@@ -15,7 +15,6 @@ import base64
 import http.server
 import random
 import webbrowser
-import threading
 from pathlib import Path
 
 THEMES = {
@@ -927,7 +926,8 @@ function renderSlideContent(s, t, containerClass, slideIdx) {{
   const layout = s.layout || 'content';
   const title = esc(s.title || '');
   const subtitle = esc(s.subtitle || '');
-  const body = s.body_elements ? renderBodyElements(s.body_elements, t) : esc(s.body || '');
+  const hasBodyElements = !!s.body_elements;
+  const body = hasBodyElements ? renderBodyElements(s.body_elements, t) : esc(s.body || '');
   const code = s.code || '';
   const imgs = getSlideImages(slideIdx);
   const captions = s.captions || [];
@@ -1037,16 +1037,24 @@ function renderSlideContent(s, t, containerClass, slideIdx) {{
     // 레이아웃 2) 텍스트·이미지 교차 배치 — 좌우 2열, 텍스트/이미지 교차
     if (effectiveLayout === 'text-img-alternating') {{
       if (title) html += `<div class="s-title" style="color:${{t.text}};font-size:clamp(0.8rem,1.8vw,1.2rem);width:100%;text-align:left">${{title}}</div>`;
-      const bodyLines = body ? body.split('\\n').filter(l => l.trim()) : [];
-      const linesPerBlock = Math.max(1, Math.ceil(bodyLines.length / imgs.length));
       let altHtml = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;width:100%;flex:1;min-height:0;overflow:auto;align-content:start">';
-      imgs.forEach((img, i) => {{
-        const blockLines = bodyLines.slice(i * linesPerBlock, (i + 1) * linesPerBlock).join('\\n');
-        altHtml += `<div style="overflow:auto;display:flex;align-items:center"><div class="s-body" style="color:${{t.text}};font-size:clamp(0.55rem,0.85vw,0.75rem);white-space:pre-wrap;line-height:1.5">${{blockLines || ''}}</div></div>`;
-        altHtml += `<div style="min-height:120px">${{renderImgTag(img, captions[i], 'width:100%;height:100%')}}</div>`;
-      }});
-      const remainLines = bodyLines.slice(imgs.length * linesPerBlock).join('\\n');
-      if (remainLines) altHtml += `<div style="grid-column:1/-1"><div class="s-body" style="color:${{t.text}};font-size:clamp(0.55rem,0.85vw,0.75rem);white-space:pre-wrap;line-height:1.5">${{remainLines}}</div></div>`;
+      if (hasBodyElements) {{
+        // body_elements는 이미 HTML이므로 분할 없이 첫 셀에 통째로 배치
+        altHtml += `<div style="overflow:auto;display:flex;align-items:center"><div class="s-body" style="color:${{t.text}};font-size:clamp(0.55rem,0.85vw,0.75rem);line-height:1.5">${{body}}</div></div>`;
+        imgs.forEach((img, i) => {{
+          altHtml += `<div style="min-height:120px">${{renderImgTag(img, captions[i], 'width:100%;height:100%')}}</div>`;
+        }});
+      }} else {{
+        const bodyLines = body ? body.split('\\n').filter(l => l.trim()) : [];
+        const linesPerBlock = Math.max(1, Math.ceil(bodyLines.length / imgs.length));
+        imgs.forEach((img, i) => {{
+          const blockLines = bodyLines.slice(i * linesPerBlock, (i + 1) * linesPerBlock).join('\\n');
+          altHtml += `<div style="overflow:auto;display:flex;align-items:center"><div class="s-body" style="color:${{t.text}};font-size:clamp(0.55rem,0.85vw,0.75rem);white-space:pre-wrap;line-height:1.5">${{blockLines || ''}}</div></div>`;
+          altHtml += `<div style="min-height:120px">${{renderImgTag(img, captions[i], 'width:100%;height:100%')}}</div>`;
+        }});
+        const remainLines = bodyLines.slice(imgs.length * linesPerBlock).join('\\n');
+        if (remainLines) altHtml += `<div style="grid-column:1/-1"><div class="s-body" style="color:${{t.text}};font-size:clamp(0.55rem,0.85vw,0.75rem);white-space:pre-wrap;line-height:1.5">${{remainLines}}</div></div>`;
+      }}
       altHtml += '</div>';
       html += altHtml;
       return html;
@@ -1098,9 +1106,9 @@ function renderSlideContent(s, t, containerClass, slideIdx) {{
     html += '<div style="display:flex;gap:0.8rem;width:100%;justify-content:center;flex-wrap:wrap">';
     s.metrics.forEach(m => {{
       html += `<div style="background:${{t.card_bg}};border-radius:12px;padding:1rem 1.2rem;text-align:center;flex:1;min-width:100px">
-        <div style="font-size:clamp(1.2rem,2.5vw,2rem);font-weight:700;color:${{t.accent}}">${{m.value}}</div>
-        <div style="font-size:0.8rem;color:${{t.text}};margin-top:0.3rem">${{m.label}}</div>
-        ${{m.change ? `<div style="font-size:0.7rem;color:${{t.subtitle}};margin-top:0.2rem">${{m.change}}</div>` : ''}}
+        <div style="font-size:clamp(1.2rem,2.5vw,2rem);font-weight:700;color:${{t.accent}}">${{esc(m.value)}}</div>
+        <div style="font-size:0.8rem;color:${{t.text}};margin-top:0.3rem">${{esc(m.label)}}</div>
+        ${{m.change ? `<div style="font-size:0.7rem;color:${{t.subtitle}};margin-top:0.2rem">${{esc(m.change)}}</div>` : ''}}
       </div>`;
     }});
     html += '</div>';
@@ -1108,8 +1116,8 @@ function renderSlideContent(s, t, containerClass, slideIdx) {{
     const renderSide = (d) => {{
       const data = typeof d === 'string' ? {{body: d}} : d;
       return `<div style="background:${{t.card_bg}};border-radius:12px;padding:0.8rem 1rem;flex:1">
-        ${{data.title ? `<div style="font-weight:700;color:${{t.accent}};margin-bottom:0.4rem;font-size:clamp(0.8rem,1.3vw,1rem)">${{data.title}}</div>` : ''}}
-        <div style="font-size:clamp(0.65rem,0.9vw,0.8rem);color:${{t.text}};white-space:pre-wrap;line-height:1.5">${{data.body || ''}}</div>
+        ${{data.title ? `<div style="font-weight:700;color:${{t.accent}};margin-bottom:0.4rem;font-size:clamp(0.8rem,1.3vw,1rem)">${{esc(data.title)}}</div>` : ''}}
+        <div style="font-size:clamp(0.65rem,0.9vw,0.8rem);color:${{t.text}};white-space:pre-wrap;line-height:1.5">${{esc(data.body || '')}}</div>
       </div>`;
     }};
     html += `<div style="display:flex;gap:0.8rem;width:100%">${{renderSide(s.left)}}${{renderSide(s.right)}}</div>`;
@@ -1118,13 +1126,13 @@ function renderSlideContent(s, t, containerClass, slideIdx) {{
     html += `<table style="width:100%;border-collapse:collapse;font-size:clamp(0.6rem,0.9vw,0.8rem)">`;
     html += '<thead><tr>';
     s.headers.forEach(h => {{
-      html += `<th style="padding:0.4rem 0.6rem;text-align:left;border-bottom:2px solid ${{t.accent}};color:${{t.text}};font-weight:600">${{h}}</th>`;
+      html += `<th style="padding:0.4rem 0.6rem;text-align:left;border-bottom:2px solid ${{t.accent}};color:${{t.text}};font-weight:600">${{esc(h)}}</th>`;
     }});
     html += '</tr></thead><tbody>';
     s.rows.forEach(row => {{
       html += '<tr>';
       row.forEach(cell => {{
-        html += `<td style="padding:0.3rem 0.6rem;border-bottom:1px solid ${{t.secondary}};color:${{t.text}}">${{cell}}</td>`;
+        html += `<td style="padding:0.3rem 0.6rem;border-bottom:1px solid ${{t.secondary}};color:${{t.text}}">${{esc(cell)}}</td>`;
       }});
       html += '</tr>';
     }});
@@ -1134,8 +1142,8 @@ function renderSlideContent(s, t, containerClass, slideIdx) {{
     s.events.forEach((e, i) => {{
       html += `<div style="text-align:center;flex:1;min-width:80px;max-width:180px">
         <div style="width:10px;height:10px;border-radius:50%;background:${{t.accent}};margin:0 auto 0.3rem"></div>
-        <div style="font-weight:700;color:${{t.accent}};font-size:clamp(0.65rem,0.9vw,0.8rem)">${{e.date}}</div>
-        <div style="font-size:clamp(0.55rem,0.8vw,0.7rem);color:${{t.text}};margin-top:0.2rem">${{e.description || e.title || ''}}</div>
+        <div style="font-weight:700;color:${{t.accent}};font-size:clamp(0.65rem,0.9vw,0.8rem)">${{esc(e.date)}}</div>
+        <div style="font-size:clamp(0.55rem,0.8vw,0.7rem);color:${{t.text}};margin-top:0.2rem">${{esc(e.description || e.title || '')}}</div>
       </div>`;
       if (i < s.events.length - 1) html += `<div style="flex:0 0 auto;margin-top:4px;color:${{t.accent}}">—</div>`;
     }});
@@ -1348,7 +1356,7 @@ function showSavePathWarning(targetPath) {{
       <div style="background:rgba(249,115,22,0.1);border:1px solid rgba(249,115,22,0.3);border-radius:10px;padding:1.2rem;margin-bottom:1.2rem">
         <div style="font-size:0.85rem;color:#FDBA74;margin-bottom:0.6rem;font-weight:600">다운로드된 파일을 반드시 아래 경로로 이동시키세요:</div>
         <div style="background:#000;border-radius:8px;padding:0.8rem 1rem;font-family:Consolas,Monaco,monospace;font-size:0.9rem;word-break:break-all;user-select:all;cursor:text;color:#4ADE80;border:1px solid #333">
-          ${{targetPath}}
+          ${{esc(targetPath)}}
         </div>
       </div>
       <div style="background:rgba(220,38,38,0.15);border:1px solid rgba(220,38,38,0.3);border-radius:8px;padding:0.8rem 1rem;margin-bottom:1.5rem">

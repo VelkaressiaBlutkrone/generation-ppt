@@ -17,9 +17,9 @@ from pathlib import Path
 from pptx import Presentation
 from pptx.util import Inches, Pt, Emu
 from pptx.dml.color import RGBColor
-from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
+from pptx.enum.text import PP_ALIGN
 from pptx.enum.shapes import MSO_SHAPE
-from pptx.oxml.ns import qn, nsmap
+from pptx.oxml.ns import qn
 from PIL import Image
 from copy import deepcopy
 from lxml import etree
@@ -43,7 +43,6 @@ ELEMENT_GAP = Inches(0.2)  # body_elements 간 수직 여백
 # ─── 폰트 ─────────────────────────────────────────────────────────
 FONT_NAME = "Pretendard"
 FONT_NAME_EA = "Pretendard"  # East Asian fallback
-FONT_FALLBACKS = ["Malgun Gothic", "맑은 고딕", "Apple SD Gothic Neo", "sans-serif"]
 
 
 def set_font_with_ea(run, font_name=FONT_NAME, ea_name=FONT_NAME_EA):
@@ -198,7 +197,7 @@ def set_slide_bg(slide, hex_color):
     fill.fore_color.rgb = hex_to_rgb(hex_color)
 
 
-def add_text_with_markdown(paragraph, text, theme, font_size=Pt(18), is_body=True):
+def add_text_with_markdown(paragraph, text, theme, font_size=Pt(18)):
     """마크다운 스타일(**굵게**, *기울임*)을 해석하여 텍스트를 추가한다."""
     if not text:
         return
@@ -223,7 +222,7 @@ def add_text_with_markdown(paragraph, text, theme, font_size=Pt(18), is_body=Tru
             run.font.italic = True
         elif part.startswith('~~') and part.endswith('~~'):
             run.text = part[2:-2]
-            # python-pptx doesn't have native strikethrough in common API, skipping for simplicity or use oxml
+            run._r.get_or_add_rPr().set('strike', 'sngStrike')
         elif part.startswith('`') and part.endswith('`'):
             run.text = part[1:-1]
             run.font.name = "Consolas"
@@ -233,6 +232,42 @@ def add_text_with_markdown(paragraph, text, theme, font_size=Pt(18), is_body=Tru
 
 # ─── 콘텐츠 오버플로우 감지 및 자동 분할 ──────────────────────────
 
+def _strip_markdown_markers(text):
+    """마크다운 인라인 마커(**,*,~~,`)를 제거하여 순수 텍스트 길이를 추정한다."""
+    return re.sub(r'\*\*|~~|[*`]', '', text)
+
+
+def _estimate_chars_per_inch(elem):
+    """요소의 텍스트에서 한글/영문 비율을 분석하여 인치당 글자 수를 추정한다.
+
+    18pt 기준: 한글 ~5자/인치, 영문 ~9자/인치. 혼합 비율로 가중 평균.
+    """
+    text = ""
+    elem_type = elem.get("type", "paragraph")
+    if elem_type in ("paragraph", "heading", "blockquote"):
+        text = elem.get("text", "")
+    elif elem_type in ("bullet_list", "numbered_list"):
+        items = elem.get("items", [])
+        text = " ".join(
+            item if isinstance(item, str) else item.get("text", "")
+            for item in items
+        )
+    elif elem_type == "code_block":
+        return 7  # 코드는 영문 위주
+
+    text = _strip_markdown_markers(text)
+    if not text:
+        return 5  # 기본: 한글 기준
+
+    # CJK 문자 비율 판별 (한글, 한자, 일본어)
+    cjk_count = sum(1 for c in text if '\u3000' <= c <= '\u9FFF' or '\uAC00' <= c <= '\uD7AF' or '\uF900' <= c <= '\uFAFF')
+    total = len(text.replace(' ', '')) or 1
+    cjk_ratio = cjk_count / total
+
+    # 가중 평균: 한글 5, 영문 9
+    return 5 * cjk_ratio + 9 * (1 - cjk_ratio)
+
+
 def _estimate_element_height(elem, width_inches=11.733):
     """body_element의 추정 높이(인치)를 반환한다.
 
@@ -241,8 +276,9 @@ def _estimate_element_height(elem, width_inches=11.733):
     """
     elem_type = elem.get("type", "paragraph")
     gap = 0.2  # ELEMENT_GAP in inches
-    # 18pt 한글 기준으로 인치당 약 5 글자
-    chars_per_line = max(1, int(width_inches * 5))
+    # 한글/영문 혼합 비율에 따른 chars_per_line 추정
+    # 18pt 기준: 한글 ~5자/인치, 영문 ~9자/인치
+    chars_per_line = max(1, int(width_inches * _estimate_chars_per_inch(elem)))
 
     if elem_type == "heading":
         level = elem.get("level", 2)
@@ -250,7 +286,7 @@ def _estimate_element_height(elem, width_inches=11.733):
         return (0.45 + 0.12 + gap) if level == 2 else (0.4 + 0.05 + gap)
 
     elif elem_type == "paragraph":
-        text = elem.get("text", "")
+        text = _strip_markdown_markers(elem.get("text", ""))
         line_count = max(1, math.ceil(len(text) / chars_per_line))
         return 0.32 * line_count + 0.1 + gap
 
@@ -263,7 +299,7 @@ def _estimate_element_height(elem, width_inches=11.733):
         return 0.32 * len(items) + 0.1 + gap
 
     elif elem_type == "blockquote":
-        text = elem.get("text", "")
+        text = _strip_markdown_markers(elem.get("text", ""))
         line_count = max(1, math.ceil(len(text) / int(chars_per_line * 0.85)))
         return 0.35 * line_count + 0.3 + gap
 
@@ -288,15 +324,17 @@ def _get_layout_dimensions(layout):
     보수적으로 추정하여 실제 렌더링 시 콘텐츠가 넘치지 않도록 한다.
     타이틀 영역(~0.85") + 상하 마진을 고려한 값이다.
     """
-    content_w = 11.733  # CONTENT_WIDTH in inches
-    content_h = 5.8     # 가용 높이 (실제 렌더링 여유 포함)
+    content_w = CONTENT_WIDTH / Inches(1)  # 인치 변환
+    title_area = 0.85 + 0.25  # 타이틀 높이 + 타이틀 하단 여백
+    content_h = (SLIDE_HEIGHT - MARGIN_TOP - MARGIN_BOTTOM) / Inches(1) - title_area
 
     if layout == "content":
         return content_h, content_w
     elif layout == "content-image":
         return content_h, content_w * 0.45  # 좌측 45% (좁은 영역)
     elif layout == "comparison":
-        return 4.2, (content_w - 0.6) / 2
+        comp_h = (CONTENT_HEIGHT - Inches(1.2)) / Inches(1)
+        return comp_h, (content_w - 0.6) / 2
     elif layout == "two-images":
         return 1.5, content_w
     else:
@@ -689,7 +727,6 @@ def _render_bullet_list(slide, elem, theme, left, top, width, remaining):
     if not items:
         return top, remaining
 
-    indent_per_level = Inches(0.3)
     line_h = Inches(0.38)  # 항목 간 충분한 간격
     total_h = line_h * len(items) + Inches(0.15)
 
@@ -725,8 +762,9 @@ def _render_bullet_list(slide, elem, theme, left, top, width, remaining):
 
 
 def _render_numbered_list(slide, elem, theme, left, top, width, remaining):
-    """번호 목록을 렌더링한다."""
+    """번호 목록을 렌더링한다 (다단계 지원)."""
     items = elem.get("items", [])
+    base_level = elem.get("level", 0)
     if not items:
         return top, remaining
 
@@ -737,20 +775,33 @@ def _render_numbered_list(slide, elem, theme, left, top, width, remaining):
     tf = box.text_frame
     tf.word_wrap = True
 
+    counter = [0] * 10  # 레벨별 카운터
     for i, item in enumerate(items):
+        if isinstance(item, dict):
+            item_text = item.get("text", "")
+            item_level = item.get("level", base_level)
+        else:
+            item_text = str(item)
+            item_level = base_level
+
+        # 하위 레벨 카운터 리셋
+        for lvl in range(item_level + 1, len(counter)):
+            counter[lvl] = 0
+        counter[item_level] += 1
+
         para = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
+        para.level = item_level
         para.space_before = Pt(6)
         para.space_after = Pt(4)
 
         # 번호
         num_run = para.add_run()
-        num_run.text = f"{i + 1}.  "
+        num_run.text = f"{counter[item_level]}.  "
         num_run.font.size = Pt(18)
         num_run.font.bold = True
         num_run.font.color.rgb = hex_to_rgb(theme["accent"])
         set_font_with_ea(num_run)
 
-        item_text = item.get("text", item) if isinstance(item, dict) else str(item)
         add_text_with_markdown(para, item_text, theme, font_size=Pt(18))
 
     total = total_h + ELEMENT_GAP
@@ -827,7 +878,11 @@ def _render_code_block(slide, elem, theme, left, top, width, remaining):
 
     lines = code.split('\n')
     line_count = len(lines)
-    box_h = Inches(0.25 * min(line_count, 12) + 0.4)
+    max_lines = 12
+    if line_count > max_lines:
+        code = '\n'.join(lines[:max_lines]) + '\n...'
+        line_count = max_lines + 1
+    box_h = Inches(0.25 * min(line_count, max_lines + 1) + 0.4)
     padding = Inches(0.12)
 
     # 어두운 배경
@@ -891,58 +946,124 @@ def _render_inline_table(slide, elem, theme, left, top, width, remaining):
         left, top, width, table_h
     )
     table = table_shape.table
+    tc = _get_table_theme_colors(theme)
 
-    # 테이블 전용 색상 (테마에 정의되어 있으면 사용, 없으면 폴백)
-    t_header_bg = theme.get("table_header_bg", theme["accent"])
-    t_header_text = theme.get("table_header_text", "#FFFFFF")
-    t_row_odd = theme.get("table_row_odd", theme["bg"])
-    t_row_even = theme.get("table_row_even", theme["secondary"])
-    t_text = theme.get("table_text", theme["text"])
-    t_border = theme.get("table_border", theme.get("subtitle", "#CCCCCC"))
-
-    # 헤더
     for c, h in enumerate(headers):
-        cell = table.cell(0, c)
-        cell.fill.solid()
-        cell.fill.fore_color.rgb = hex_to_rgb(t_header_bg)
-        _set_cell_border(cell, 'left', 0)
-        _set_cell_border(cell, 'right', 0)
-        _set_cell_border(cell, 'top', 0)
-        _set_cell_border(cell, 'bottom', width_pt=2, color_hex=t_border)
-        _set_cell_margins(cell, top=Pt(6), bottom=Pt(6), left=Pt(10), right=Pt(10))
-        para = cell.text_frame.paragraphs[0]
-        run = para.add_run()
-        run.text = str(h)
-        run.font.size = Pt(14)
-        run.font.bold = True
-        run.font.color.rgb = hex_to_rgb(t_header_text)
-        set_font_with_ea(run)
+        _style_table_header_cell(table.cell(0, c), h, tc, font_size=Pt(14))
 
-    # 데이터 행
-    cols_count = len(headers)
     for r, row_data in enumerate(rows):
-        row_bg = t_row_even if r % 2 == 0 else t_row_odd
         for c, val in enumerate(row_data[:cols_count]):
-            cell = table.cell(r + 1, c)
-            cell.fill.solid()
-            cell.fill.fore_color.rgb = hex_to_rgb(row_bg)
-            _set_cell_border(cell, 'left', 0)
-            _set_cell_border(cell, 'right', 0)
-            _set_cell_border(cell, 'top', 0)
-            _set_cell_border(cell, 'bottom', width_pt=0.5, color_hex=t_border)
-            _set_cell_margins(cell, top=Pt(5), bottom=Pt(5), left=Pt(10), right=Pt(10))
-            para = cell.text_frame.paragraphs[0]
-            run = para.add_run()
-            run.text = str(val)
-            run.font.size = Pt(13)
-            run.font.color.rgb = hex_to_rgb(t_text)
-            set_font_with_ea(run)
+            _style_table_data_cell(table.cell(r + 1, c), val, tc, r, font_size=Pt(13))
 
     total_h = table_h + ELEMENT_GAP
     return top + total_h, remaining - total_h
 
 
 # ─── 슬라이드 제목 렌더 헬퍼 ──────────────────────────────────────
+
+def _get_table_theme_colors(theme):
+    """테이블 전용 색상을 테마에서 추출한다."""
+    return {
+        "header_bg": theme.get("table_header_bg", theme["accent"]),
+        "header_text": theme.get("table_header_text", "#FFFFFF"),
+        "row_odd": theme.get("table_row_odd", theme["bg"]),
+        "row_even": theme.get("table_row_even", theme["secondary"]),
+        "text": theme.get("table_text", theme["text"]),
+        "border": theme.get("table_border", theme.get("subtitle", "#CCCCCC")),
+    }
+
+
+def _style_table_header_cell(cell, text, tc, font_size=Pt(18)):
+    """테이블 헤더 셀에 공통 스타일을 적용한다."""
+    cell.fill.solid()
+    cell.fill.fore_color.rgb = hex_to_rgb(tc["header_bg"])
+    _set_cell_border(cell, 'left', 0)
+    _set_cell_border(cell, 'right', 0)
+    _set_cell_border(cell, 'top', 0)
+    _set_cell_border(cell, 'bottom', width_pt=2, color_hex=tc["border"])
+    _set_cell_margins(cell, top=Pt(6), bottom=Pt(6), left=Pt(10), right=Pt(10))
+    para = cell.text_frame.paragraphs[0]
+    run = para.add_run()
+    run.text = str(text)
+    run.font.size = font_size
+    run.font.bold = True
+    run.font.color.rgb = hex_to_rgb(tc["header_text"])
+    set_font_with_ea(run)
+
+
+def _style_table_data_cell(cell, text, tc, row_idx, font_size=Pt(16)):
+    """테이블 데이터 셀에 공통 스타일을 적용한다."""
+    row_bg = tc["row_even"] if row_idx % 2 == 0 else tc["row_odd"]
+    cell.fill.solid()
+    cell.fill.fore_color.rgb = hex_to_rgb(row_bg)
+    _set_cell_border(cell, 'left', 0)
+    _set_cell_border(cell, 'right', 0)
+    _set_cell_border(cell, 'top', 0)
+    _set_cell_border(cell, 'bottom', width_pt=0.5, color_hex=tc["border"])
+    _set_cell_margins(cell, top=Pt(5), bottom=Pt(5), left=Pt(10), right=Pt(10))
+    para = cell.text_frame.paragraphs[0]
+    run = para.add_run()
+    run.text = str(text)
+    run.font.size = font_size
+    run.font.color.rgb = hex_to_rgb(tc["text"])
+    set_font_with_ea(run)
+
+
+def _render_centered_hero_title(slide, title_text, theme, subtitle="", font_size=Pt(54)):
+    """title/closing 슬라이드용 중앙 배치 큰 제목 + accent bar + 부제목을 렌더링한다.
+
+    Returns: (bar_y, subtitle_end_y) — accent bar y 위치와 부제목 하단 y 위치.
+    """
+    chars_per_line = max(1, int(CONTENT_WIDTH / Inches(1) * 1.3))
+    title_lines = max(1, math.ceil(len(title_text) / chars_per_line))
+    title_h = Inches(0.85 * title_lines)
+
+    if title_lines == 1:
+        title_top = Inches(2.8)
+    elif title_lines == 2:
+        title_top = Inches(2.2)
+    else:
+        title_top = Inches(1.6)
+
+    title_box = slide.shapes.add_textbox(MARGIN_LEFT, title_top, CONTENT_WIDTH, title_h)
+    tf = title_box.text_frame
+    tf.word_wrap = True
+    para = tf.paragraphs[0]
+    para.alignment = PP_ALIGN.CENTER
+    run = para.add_run()
+    run.text = title_text
+    run.font.size = font_size
+    run.font.bold = True
+    run.font.color.rgb = hex_to_rgb(theme["text"])
+    set_font_with_ea(run)
+
+    bar_y = title_top + title_h + Inches(0.25)
+    subtitle_y = bar_y + Inches(0.2)
+
+    # accent bar
+    line = slide.shapes.add_shape(
+        MSO_SHAPE.RECTANGLE,
+        Inches(5.5), bar_y, Inches(2.3), Pt(4)
+    )
+    line.fill.solid()
+    line.fill.fore_color.rgb = hex_to_rgb(theme["accent"])
+    line.line.fill.background()
+
+    subtitle_end_y = subtitle_y + Inches(0.3)
+    if subtitle:
+        sub_box = slide.shapes.add_textbox(MARGIN_LEFT, subtitle_y, CONTENT_WIDTH, Inches(0.8))
+        tf2 = sub_box.text_frame
+        para2 = tf2.paragraphs[0]
+        para2.alignment = PP_ALIGN.CENTER
+        run2 = para2.add_run()
+        run2.text = subtitle
+        run2.font.size = Pt(24)
+        run2.font.color.rgb = hex_to_rgb(theme["subtitle"])
+        set_font_with_ea(run2)
+        subtitle_end_y = subtitle_y + Inches(0.9)
+
+    return bar_y, subtitle_end_y
+
 
 def _render_slide_title(slide, title_text, theme, width=None):
     """슬라이드 제목을 렌더링하고 body 시작 y 위치를 반환한다.
@@ -980,64 +1101,12 @@ def layout_title(prs, slide_data, theme):
     slide = prs.slides.add_slide(prs.slide_layouts[6])  # Blank
     set_slide_bg(slide, theme["bg"])
 
-    title_text = slide_data.get("title", "")
-
-    # 제목 줄 수 추정 (54pt Bold 한글 기준)
-    # 54pt 한글 글자 ≈ 0.75" 너비 → 인치당 약 1.3자
-    chars_per_line = max(1, int(CONTENT_WIDTH / Inches(1) * 1.3))
-    title_lines = max(1, math.ceil(len(title_text) / chars_per_line))
-    title_h = Inches(0.85 * title_lines)
-
-    # 제목 시작 y — 줄 수에 따라 상단으로 올림
-    if title_lines == 1:
-        title_top = Inches(2.8)
-    elif title_lines == 2:
-        title_top = Inches(2.2)
-    else:
-        title_top = Inches(1.6)
-
-    # 메인 제목
-    title_box = slide.shapes.add_textbox(
-        MARGIN_LEFT, title_top, CONTENT_WIDTH, title_h
+    _render_centered_hero_title(
+        slide,
+        slide_data.get("title", ""),
+        theme,
+        subtitle=slide_data.get("subtitle", ""),
     )
-    tf = title_box.text_frame
-    tf.word_wrap = True
-    para = tf.paragraphs[0]
-    para.alignment = PP_ALIGN.CENTER
-    run = para.add_run()
-    run.text = title_text
-    run.font.size = Pt(54)
-    run.font.bold = True
-    run.font.color.rgb = hex_to_rgb(theme["text"])
-    set_font_with_ea(run)
-
-    # accent bar와 부제목 위치 — 제목 하단 기준으로 동적 배치
-    bar_y = title_top + title_h + Inches(0.25)
-    subtitle_y = bar_y + Inches(0.2)
-
-    # 부제목
-    subtitle = slide_data.get("subtitle", "")
-    if subtitle:
-        sub_box = slide.shapes.add_textbox(
-            MARGIN_LEFT, subtitle_y, CONTENT_WIDTH, Inches(0.8)
-        )
-        tf2 = sub_box.text_frame
-        para2 = tf2.paragraphs[0]
-        para2.alignment = PP_ALIGN.CENTER
-        run2 = para2.add_run()
-        run2.text = subtitle
-        run2.font.size = Pt(24)
-        run2.font.color.rgb = hex_to_rgb(theme["subtitle"])
-        set_font_with_ea(run2)
-
-    # 강조 데코레이션 — 제목 아래에 동적 배치
-    line = slide.shapes.add_shape(
-        MSO_SHAPE.RECTANGLE,
-        Inches(5.5), bar_y, Inches(2.3), Pt(4)
-    )
-    line.fill.solid()
-    line.fill.fore_color.rgb = hex_to_rgb(theme["accent"])
-    line.line.fill.background()
 
     return slide
 
@@ -1431,55 +1500,21 @@ def layout_table(prs, slide_data, theme):
 
     rows_count = len(rows) + 1
     cols_count = len(headers)
-    
+
     table_shape = slide.shapes.add_table(
-        rows_count, cols_count, 
-        MARGIN_LEFT, MARGIN_TOP + Inches(1.2), 
+        rows_count, cols_count,
+        MARGIN_LEFT, MARGIN_TOP + Inches(1.2),
         CONTENT_WIDTH, Inches(0.5) * rows_count
     )
     table = table_shape.table
+    tc = _get_table_theme_colors(theme)
 
-    # 테이블 전용 색상
-    t_header_bg = theme.get("table_header_bg", theme["accent"])
-    t_header_text = theme.get("table_header_text", "#FFFFFF")
-    t_row_odd = theme.get("table_row_odd", theme["bg"])
-    t_row_even = theme.get("table_row_even", theme["secondary"])
-    t_text = theme.get("table_text", theme["text"])
-    t_border = theme.get("table_border", theme.get("subtitle", "#CCCCCC"))
-
-    # 헤더 스타일
     for c, h in enumerate(headers):
-        cell = table.cell(0, c)
-        cell.fill.solid()
-        cell.fill.fore_color.rgb = hex_to_rgb(t_header_bg)
-        _set_cell_border(cell, 'bottom', width_pt=2, color_hex=t_border)
-        _set_cell_margins(cell, top=Pt(6), bottom=Pt(6), left=Pt(10), right=Pt(10))
-        para = cell.text_frame.paragraphs[0]
-        run = para.add_run()
-        run.text = str(h)
-        run.font.size = Pt(18); run.font.bold = True
-        run.font.color.rgb = hex_to_rgb(t_header_text)
-        set_font_with_ea(run)
+        _style_table_header_cell(table.cell(0, c), h, tc, font_size=Pt(18))
 
-    # 데이터 행
-    cols_count = len(headers)
     for r, row_data in enumerate(rows):
-        row_bg = t_row_even if r % 2 == 0 else t_row_odd
         for c, val in enumerate(row_data[:cols_count]):
-            cell = table.cell(r + 1, c)
-            cell.fill.solid()
-            cell.fill.fore_color.rgb = hex_to_rgb(row_bg)
-            _set_cell_border(cell, 'left', 0)
-            _set_cell_border(cell, 'right', 0)
-            _set_cell_border(cell, 'top', 0)
-            _set_cell_border(cell, 'bottom', width_pt=0.5, color_hex=t_border)
-            _set_cell_margins(cell, top=Pt(5), bottom=Pt(5), left=Pt(10), right=Pt(10))
-            para = cell.text_frame.paragraphs[0]
-            run = para.add_run()
-            run.text = str(val)
-            run.font.size = Pt(16)
-            run.font.color.rgb = hex_to_rgb(t_text)
-            set_font_with_ea(run)
+            _style_table_data_cell(table.cell(r + 1, c), val, tc, r, font_size=Pt(16))
 
     return slide
 
@@ -1526,8 +1561,7 @@ def layout_kpi(prs, slide_data, theme):
     slide = prs.slides.add_slide(prs.slide_layouts[6])
     set_slide_bg(slide, theme["bg"])
 
-    title_box = slide.shapes.add_textbox(MARGIN_LEFT, MARGIN_TOP, CONTENT_WIDTH, Inches(0.8))
-    title_box.text_frame.paragraphs[0].text = slide_data.get("title", "")
+    _render_slide_title(slide, slide_data.get("title", ""), theme)
 
     metrics = slide_data.get("metrics", [])
     if not metrics: return slide
@@ -1614,58 +1648,18 @@ def layout_closing(prs, slide_data, theme):
     slide = prs.slides.add_slide(prs.slide_layouts[6])
     set_slide_bg(slide, theme["bg"])
 
-    title_text = slide_data.get("title", "감사합니다")
-
-    # 제목 줄 수 추정 (54pt Bold 한글 기준, 인치당 ~1.3자)
-    chars_per_line = max(1, int(CONTENT_WIDTH / Inches(1) * 1.3))
-    title_lines = max(1, math.ceil(len(title_text) / chars_per_line))
-    title_h = Inches(0.85 * title_lines)
-    if title_lines == 1:
-        title_top = Inches(2.8)
-    elif title_lines == 2:
-        title_top = Inches(2.2)
-    else:
-        title_top = Inches(1.6)
-
-    title_box = slide.shapes.add_textbox(
-        MARGIN_LEFT, title_top, CONTENT_WIDTH, title_h
-    )
-    tf = title_box.text_frame
-    tf.word_wrap = True
-    para = tf.paragraphs[0]
-    para.alignment = PP_ALIGN.CENTER
-    run = para.add_run()
-    run.text = title_text
-    run.font.size = Pt(54)
-    run.font.bold = True
-    run.font.color.rgb = hex_to_rgb(theme["text"])
-    set_font_with_ea(run)
-
-    # bar/부제목/연락처 — 제목 하단 기준 동적 배치
-    bar_y = title_top + title_h + Inches(0.25)
-    subtitle_y = bar_y + Inches(0.2)
-
     subtitle = slide_data.get("subtitle", "")
-    if subtitle:
-        sub_box = slide.shapes.add_textbox(
-            MARGIN_LEFT, subtitle_y, CONTENT_WIDTH, Inches(0.8)
-        )
-        tf2 = sub_box.text_frame
-        para2 = tf2.paragraphs[0]
-        para2.alignment = PP_ALIGN.CENTER
-        run2 = para2.add_run()
-        run2.text = subtitle
-        run2.font.size = Pt(22)
-        run2.font.color.rgb = hex_to_rgb(theme["subtitle"])
-        set_font_with_ea(run2)
-        contact_y = subtitle_y + Inches(0.9)
-    else:
-        contact_y = subtitle_y + Inches(0.3)
+    _, subtitle_end_y = _render_centered_hero_title(
+        slide,
+        slide_data.get("title", "감사합니다"),
+        theme,
+        subtitle=subtitle,
+    )
 
     contact = slide_data.get("contact", "")
     if contact:
         c_box = slide.shapes.add_textbox(
-            MARGIN_LEFT, contact_y, CONTENT_WIDTH, Inches(0.5)
+            MARGIN_LEFT, subtitle_end_y, CONTENT_WIDTH, Inches(0.5)
         )
         tf3 = c_box.text_frame
         para3 = tf3.paragraphs[0]
@@ -1675,15 +1669,6 @@ def layout_closing(prs, slide_data, theme):
         run3.font.size = Pt(16)
         run3.font.color.rgb = hex_to_rgb(theme["subtitle"])
         set_font_with_ea(run3)
-
-    # 강조 라인 — 제목 하단 기준 동적 배치
-    line = slide.shapes.add_shape(
-        MSO_SHAPE.RECTANGLE,
-        Inches(5.5), bar_y, Inches(2.3), Pt(4)
-    )
-    line.fill.solid()
-    line.fill.fore_color.rgb = hex_to_rgb(theme["accent"])
-    line.line.fill.background()
 
     return slide
 
