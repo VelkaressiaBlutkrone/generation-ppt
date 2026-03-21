@@ -69,6 +69,7 @@ md-to-pptx-skill-mng/
 | 파일                             | 용도                                                                        |
 | -------------------------------- | --------------------------------------------------------------------------- |
 | `.ai/skills/md-to-pptx/SKILL.md` | **필독** — 전체 워크플로우, 파싱 규칙, URL 완전성 검증, 레이아웃 타입, 테마 |
+| `.ai/skills/md-to-pptx/references/troubleshooting.md` | 트러블슈팅 가이드 — 이미지 경로, 프리뷰, 불릿, YouTube 등 |
 | `sources/*.md`                   | 입력 마크다운. `#` 기준 슬라이드 분리                                       |
 | `output/slides.json`             | 파싱 결과 JSON (PPTX 생성용 spec 기반)                                      |
 | `output/preview.choices.json`    | 사용자 선택(테마, 다중 이미지 레이아웃)                                     |

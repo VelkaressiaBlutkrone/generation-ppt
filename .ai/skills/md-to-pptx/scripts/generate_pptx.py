@@ -748,12 +748,29 @@ def _render_bullet_list(slide, elem, theme, left, top, width, remaining):
         para.space_before = Pt(6)
         para.space_after = Pt(4)
 
-        # 불릿 마커
-        bullet_run = para.add_run()
-        bullet_run.text = "•  "
-        bullet_run.font.size = Pt(18)
-        bullet_run.font.color.rgb = hex_to_rgb(theme["accent"])
-        set_font_with_ea(bullet_run)
+        # PowerPoint 네이티브 불릿 설정
+        pPr = para._pPr
+        if pPr is None:
+            pPr = para._p.get_or_add_pPr()
+        buChar = pPr.makeelement(qn('a:buChar'), {'char': '•'})
+        # 기존 불릿 제거 후 추가
+        for existing in pPr.findall(qn('a:buChar')):
+            pPr.remove(existing)
+        for existing in pPr.findall(qn('a:buNone')):
+            pPr.remove(existing)
+        pPr.append(buChar)
+        # 불릿 색상 설정
+        buClr = pPr.makeelement(qn('a:buClr'), {})
+        srgbClr = buClr.makeelement(qn('a:srgbClr'), {'val': theme["accent"].lstrip('#')})
+        buClr.append(srgbClr)
+        for existing in pPr.findall(qn('a:buClr')):
+            pPr.remove(existing)
+        pPr.append(buClr)
+        # 불릿 크기
+        buSzPct = pPr.makeelement(qn('a:buSzPct'), {'val': '100000'})
+        for existing in pPr.findall(qn('a:buSzPct')):
+            pPr.remove(existing)
+        pPr.append(buSzPct)
 
         add_text_with_markdown(para, item_text, theme, font_size=Pt(18))
 
@@ -794,13 +811,32 @@ def _render_numbered_list(slide, elem, theme, left, top, width, remaining):
         para.space_before = Pt(6)
         para.space_after = Pt(4)
 
-        # 번호
-        num_run = para.add_run()
-        num_run.text = f"{counter[item_level]}.  "
-        num_run.font.size = Pt(18)
-        num_run.font.bold = True
-        num_run.font.color.rgb = hex_to_rgb(theme["accent"])
-        set_font_with_ea(num_run)
+        # PowerPoint 네이티브 번호 불릿 설정
+        pPr = para._pPr
+        if pPr is None:
+            pPr = para._p.get_or_add_pPr()
+        # 기존 불릿 제거
+        for tag in ('a:buChar', 'a:buNone', 'a:buAutoNum'):
+            for existing in pPr.findall(qn(tag)):
+                pPr.remove(existing)
+        buAutoNum = pPr.makeelement(qn('a:buAutoNum'), {'type': 'arabicPeriod', 'startAt': str(counter[item_level])})
+        pPr.append(buAutoNum)
+        # 불릿 색상
+        buClr = pPr.makeelement(qn('a:buClr'), {})
+        srgbClr = buClr.makeelement(qn('a:srgbClr'), {'val': theme["accent"].lstrip('#')})
+        buClr.append(srgbClr)
+        for existing in pPr.findall(qn('a:buClr')):
+            pPr.remove(existing)
+        pPr.append(buClr)
+        # 불릿 크기 + 볼드
+        buSzPct = pPr.makeelement(qn('a:buSzPct'), {'val': '100000'})
+        for existing in pPr.findall(qn('a:buSzPct')):
+            pPr.remove(existing)
+        pPr.append(buSzPct)
+        buFont = pPr.makeelement(qn('a:buFont'), {'typeface': FONT_NAME})
+        for existing in pPr.findall(qn('a:buFont')):
+            pPr.remove(existing)
+        pPr.append(buFont)
 
         add_text_with_markdown(para, item_text, theme, font_size=Pt(18))
 
@@ -1007,6 +1043,87 @@ def _style_table_data_cell(cell, text, tc, row_idx, font_size=Pt(16)):
     run.font.size = font_size
     run.font.color.rgb = hex_to_rgb(tc["text"])
     set_font_with_ea(run)
+
+
+def _extract_youtube_id(url):
+    """YouTube URL에서 영상 ID를 추출한다."""
+    import re as _re
+    m = _re.search(r'(?:v=|youtu\.be/)([A-Za-z0-9_-]{11})', url)
+    return m.group(1) if m else None
+
+
+def _embed_online_video(slide, video_url, thumb_path, left, top, width, height):
+    """PowerPoint 슬라이드에 YouTube 온라인 비디오를 임베드한다.
+
+    PowerPoint 2013+에서 클릭 시 영상 재생이 가능하다.
+    썸네일 이미지를 포스터 프레임으로 사용한다.
+    """
+    video_id = _extract_youtube_id(video_url)
+    if not video_id:
+        return
+
+    # 썸네일 이미지를 먼저 추가하여 shape의 rId를 얻는다
+    pic = slide.shapes.add_picture(thumb_path, left, top, width=width)
+    spTree = slide.shapes._spTree
+
+    # pic shape의 XML을 기반으로 Online Video용 p:pic 구성
+    pic_elem = pic._element
+
+    # blipFill의 blip에 video 관계 추가
+    ns_r = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
+    ns_p = 'http://schemas.openxmlformats.org/presentationml/2006/main'
+    ns_a = 'http://schemas.openxmlformats.org/drawingml/2006/main'
+    ns_p14 = 'http://schemas.microsoft.com/office/powerpoint/2010/main'
+
+    # 비디오 관계 (YouTube embed URL) 추가
+    embed_url = f'https://www.youtube.com/embed/{video_id}'
+    video_rId = slide.part.relate_to(embed_url, 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/video')
+
+    # nvPicPr > nvPr에 videoFile 추가 (온라인 비디오 마커)
+    nvPr = pic_elem.find(f'{{{ns_p}}}nvSpPr')
+    if nvPr is None:
+        # nvPicPr 구조에서 nvPr 찾기
+        nvPicPr = pic_elem.find(qn('p:nvPicPr'))
+        if nvPicPr is not None:
+            nvPr = nvPicPr.find(qn('p:nvPr'))
+            if nvPr is None:
+                nvPr = etree.SubElement(nvPicPr, qn('p:nvPr'))
+
+            # videoFile 요소 추가
+            videoFile = etree.SubElement(nvPr, qn('a:videoFile'))
+            videoFile.set(qn('r:link'), video_rId)
+
+            # extLst에 p14:media 추가 (PowerPoint 2010+ 호환)
+            extLst = nvPr.find(qn('p:extLst'))
+            if extLst is None:
+                extLst = etree.SubElement(nvPr, qn('p:extLst'))
+            ext = etree.SubElement(extLst, qn('p:ext'))
+            ext.set('uri', '{DAA4B4D4-6D71-4841-9C94-3DE7FCFB9230}')
+            media = etree.SubElement(ext, f'{{{ns_p14}}}media')
+            media.set(qn('r:embed'), '')
+            media.set(qn('r:link'), video_rId)
+
+    # 재생 버튼 오버레이 추가
+    play_size = Inches(0.8)
+    play_left = left + (width - play_size) // 2
+    play_top = top + (height - play_size) // 2
+    play_btn = slide.shapes.add_shape(
+        MSO_SHAPE.OVAL, play_left, play_top, play_size, play_size
+    )
+    play_btn.fill.solid()
+    play_btn.fill.fore_color.rgb = RGBColor(255, 0, 0)
+    play_btn.fill.transparency = 0.15
+    play_btn.line.fill.background()
+    play_btn.click_action.hyperlink.address = video_url
+    tf_play = play_btn.text_frame
+    tf_play.word_wrap = False
+    p_play = tf_play.paragraphs[0]
+    p_play.alignment = PP_ALIGN.CENTER
+    run_play = p_play.add_run()
+    run_play.text = "▶"
+    run_play.font.size = Pt(28)
+    run_play.font.color.rgb = RGBColor(255, 255, 255)
+    run_play.font.bold = True
 
 
 def _render_centered_hero_title(slide, title_text, theme, subtitle="", font_size=Pt(54)):
@@ -1226,31 +1343,8 @@ def layout_content_image(prs, slide_data, theme):
     img_path = slide_data.get("image")
 
     if video_url and img_path and os.path.exists(img_path):
-        # YouTube 썸네일 이미지 + 재생 버튼 오버레이 + 하이퍼링크
-        pic = slide.shapes.add_picture(img_path, img_left, img_top, width=img_width)
-        pic.click_action.hyperlink.address = video_url
-
-        # 재생 버튼 (▶) 오버레이
-        play_size = Inches(0.8)
-        play_left = img_left + (img_width - play_size) // 2
-        play_top = img_top + (img_height - play_size) // 2
-        play_btn = slide.shapes.add_shape(
-            MSO_SHAPE.OVAL, play_left, play_top, play_size, play_size
-        )
-        play_btn.fill.solid()
-        play_btn.fill.fore_color.rgb = RGBColor(255, 0, 0)
-        play_btn.fill.transparency = 0.15
-        play_btn.line.fill.background()
-        play_btn.click_action.hyperlink.address = video_url
-        tf_play = play_btn.text_frame
-        tf_play.word_wrap = False
-        p_play = tf_play.paragraphs[0]
-        p_play.alignment = PP_ALIGN.CENTER
-        run_play = p_play.add_run()
-        run_play.text = "▶"
-        run_play.font.size = Pt(28)
-        run_play.font.color.rgb = RGBColor(255, 255, 255)
-        run_play.font.bold = True
+        # YouTube 온라인 비디오 임베드 (PowerPoint 2013+ 재생 가능)
+        _embed_online_video(slide, video_url, img_path, img_left, img_top, img_width, img_height)
     elif img_path and os.path.exists(img_path):
         # 가로세로 비율 유지하며 채우기
         slide.shapes.add_picture(img_path, img_left, img_top, width=img_width)

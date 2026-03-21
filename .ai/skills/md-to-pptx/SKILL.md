@@ -199,7 +199,7 @@ Claude는 콘텐츠를 분석하여 위 규칙을 기반으로 판단하되, 콘
 
 마크다운 본문에서 발견된 URL을 **유형에 따라 자동 분류**하여 처리한다:
 
-- **YouTube URL** (`youtube.com/watch?v=`, `youtu.be/`) → **프리뷰에서 iframe 임베드**, **PPTX에서 썸네일 이미지 + ▶ 재생 버튼 + 클릭 시 YouTube 하이퍼링크**. 스크린샷도 함께 캡처하여 PPTX 이미지로 사용한다. JSON spec에 `video_url` 필드를 추가한다.
+- **YouTube URL** (`youtube.com/watch?v=`, `youtu.be/`) → **프리뷰에서 iframe 임베드**, **PPTX에서 온라인 비디오 임베드 (PowerPoint 2013+에서 인라인 재생 가능)** + 썸네일 포스터 프레임 + ▶ 재생 버튼 + 폴백 하이퍼링크. 스크린샷도 함께 캡처하여 PPTX 썸네일로 사용한다. JSON spec에 `video_url` 필드를 추가한다.
 - **이미지 URL** (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.svg`, `.bmp`, `.ico`, `.tiff`, `.avif` 확장자 또는 Content-Type이 `image/*`) → **직접 다운로드**하여 원본 이미지를 슬라이드에 삽입
 - **웹사이트 URL** (위에 해당하지 않는 일반 페이지) → **Playwright 스크린샷 캡처**하여 슬라이드에 삽입
 
@@ -434,11 +434,20 @@ python <skill-path>/scripts/generate_pptx.py <spec.json> <output.pptx>
 
 ### 주의사항
 
-- 이미지 경로가 상대경로이면 마크다운 파일 위치 기준으로 해석한다
+- **이미지 경로 기준**: slides.json의 이미지 경로는 **slides.json 파일 위치 기준** 상대경로로 작성한다. 캡처 이미지는 slides.json과 같은 디렉토리의 `_captures/` 하위에 저장하고, 경로는 `./_captures/파일명.png` 형식을 사용한다. 프로젝트 루트 기준 경로(`./output/...`)로 작성하면 generate_pptx.py가 경로를 찾지 못한다.
 - URL 캡처 실패 시 해당 이미지를 건너뛰고 텍스트로 URL을 표시한다
 - 로그인 필요 페이지는 캡처할 수 없다 (공개 페이지만 지원)
 - 이미지가 1개인 슬라이드는 레이아웃 선택 없이 자동 배치한다
 - 이미지가 2개 이상인 슬라이드만 프리뷰에서 레이아웃 선택 UI를 표시한다
+- **프리뷰 브라우저 오픈**: preview.py를 서버 모드(기본값)로 실행하면 자동으로 브라우저가 열린다. 별도로 `start`/`open` 명령을 실행하면 2번 열리므로, 서버 모드에서는 수동 오픈하지 않는다. 비서버 모드(`--no-serve`)에서만 수동으로 HTML을 연다.
+- **다이어그램 지원**: ERD, 플로우차트 등 다이어그램이 필요한 경우 mermaid CLI로 이미지를 생성하여 `image-full` 또는 `content-image` 레이아웃으로 삽입한다. 코드블록 텍스트보다 시각적 다이어그램이 훨씬 효과적이다.
+  ```bash
+  npx -y @mermaid-js/mermaid-cli -i diagram.mmd -o diagram.png -w 1920 -H 1080 --backgroundColor transparent
+  ```
+
+### 트러블슈팅
+
+문제 발생 시 `references/troubleshooting.md`를 참조한다. 이미지 경로, 프리뷰 중복 오픈, 불릿 정렬, YouTube 재생, 코드블록 오버플로우 등 주요 이슈의 원인과 해결 방법이 정리되어 있다.
 
 ### 마크다운 본문 포맷 지원
 
@@ -446,7 +455,8 @@ python <skill-path>/scripts/generate_pptx.py <spec.json> <output.pptx>
 
 - `**굵게**` → Bold
 - `*기울임*` → Italic
-- `~~취소선~~` → Strikethrough
+- `~~취소선~~` → Strikethrough (oxml `sngStrike` 속성으로 렌더링)
+- `` `인라인코드` `` → Consolas 모노스페이스
 - `` `코드` `` → 고정폭 폰트
 - `- 항목` → 불릿 리스트
 - `1. 항목` → 번호 리스트
